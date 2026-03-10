@@ -1,9 +1,37 @@
-import { Text, View } from 'react-native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { onAuthStateChanged } from 'firebase/auth';
+import { useEffect, useState } from 'react';
+import { auth } from './config/firebase';
+import HomeScreen from './screens/HomeScreen';
+import LoginScreen from './screens/LoginScreen';
+import RegisterScreen from './screens/RegisterScreen';
+
+const Stack = createNativeStackNavigator();
 
 export default function Index() {
+  const [usuario, setUsuario] = useState<any>(null);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    const unsuscribe = onAuthStateChanged(auth, (user) => {
+      setUsuario(user);
+      setCargando(false);
+    });
+    return unsuscribe;
+  }, []);
+
+  if (cargando) return null;
+
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e' }}>
-      <Text style={{ color: 'white', fontSize: 24, fontWeight: 'bold' }}>BillarMania 🎱</Text>
-    </View>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {usuario ? (
+        <Stack.Screen name="Home" component={HomeScreen} />
+      ) : (
+        <>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+        </>
+      )}
+    </Stack.Navigator>
   );
 }
