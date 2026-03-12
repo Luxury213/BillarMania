@@ -1,7 +1,9 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
-import { auth } from './config/firebase';
+import { ActivityIndicator, View } from 'react-native';
+import { auth } from '../config/firebase';
+import { colors } from '../config/theme';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
@@ -20,7 +22,11 @@ export default function Index() {
     return unsuscribe;
   }, []);
 
-  if (cargando) return null;
+  if (cargando) return (
+    <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
+      <ActivityIndicator size="large" color={colors.primary} />
+    </View>
+  );
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
