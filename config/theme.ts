@@ -64,45 +64,45 @@ export const neonBorder = (color: string) => ({
   ...neonBox(color),
 });
 
-// ── TIPOGRAFÍA (estilo Balatro) ──────────────
-// Todo en mayúsculas, mucho letterSpacing, pixel art feel
 export const typography = {
   gameTitle: {
-    fontSize: 34,
-    fontWeight: '900' as const,
-    letterSpacing: 14,
-    textTransform: 'uppercase' as const,
-  },
-  heading: {
-    fontSize: 22,
-    fontWeight: '900' as const,
+    fontSize: 48,
+    fontFamily: 'm6x11',
     letterSpacing: 6,
     textTransform: 'uppercase' as const,
   },
-  label: {
-    fontSize: 11,
-    fontWeight: 'bold' as const,
+  heading: {
+    fontSize: 28,
+    fontFamily: 'm6x11',
     letterSpacing: 4,
     textTransform: 'uppercase' as const,
   },
   button: {
-    fontSize: 13,
-    fontWeight: '900' as const,
-    letterSpacing: 4,
+    fontSize: 20,
+    fontFamily: 'm6x11',
+    letterSpacing: 3,
+    textTransform: 'uppercase' as const,
+  },
+  label: {
+    fontSize: 16,
+    fontFamily: 'VT323',
+    letterSpacing: 3,
     textTransform: 'uppercase' as const,
   },
   body: {
-    fontSize: 14,
+    fontSize: 18,
+    fontFamily: 'VT323',
     letterSpacing: 1,
   },
   mono: {
-    fontSize: 12,
-    letterSpacing: 3,
-    fontVariant: ['tabular-nums'] as any,
+    fontSize: 16,
+    fontFamily: 'VT323',
+    letterSpacing: 2,
   },
   small: {
-    fontSize: 9,
-    letterSpacing: 3,
+    fontSize: 14,
+    fontFamily: 'VT323',
+    letterSpacing: 2,
     textTransform: 'uppercase' as const,
   },
 };

@@ -1,4 +1,6 @@
+import { VT323_400Regular } from '@expo-google-fonts/vt323';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useFonts } from 'expo-font';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -14,6 +16,11 @@ export default function Index() {
   const [usuario, setUsuario] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
 
+  const [fontsLoaded] = useFonts({
+    VT323: VT323_400Regular,
+    m6x11: require('../assets/fonts/m6x11plus.ttf'),
+  });
+
   useEffect(() => {
     const unsuscribe = onAuthStateChanged(auth, (user) => {
       setUsuario(user);
@@ -22,7 +29,7 @@ export default function Index() {
     return unsuscribe;
   }, []);
 
-  if (cargando) return (
+  if (!fontsLoaded || cargando) return (
     <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }}>
       <ActivityIndicator size="large" color={colors.primary} />
     </View>
