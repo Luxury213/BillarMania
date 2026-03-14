@@ -1,22 +1,18 @@
-// ═══════════════════════════════════════════
-//  BILLARMANIA — DESIGN SYSTEM
-//  Inspirado en Balatro: pixel art + neon noir
-// ═══════════════════════════════════════════
 
-// ── COLORES BASE ────────────────────────────
 export const colors = {
   // Fondos
-  bg:          '#060910',  // negro profundo
-  bgCard:      '#0a1020',  // cards y modales
-  bgInput:     '#0d1628',  // campos de texto
-  bgOverlay:   '#030508',  // overlays
+  bg:          '#060910',
+  bgCard:      '#0a1020',
+  bgInput:     '#0d1628',
+  bgOverlay:   '#030508',
 
-  // Neón principal
-  primary:     '#00d4ff',  // azul neón (como el verde de Balatro pero azul)
-  accent:      '#ff2d55',  // rojo neón (botones principales)
-  purple:      '#9b30ff',  // púrpura (potenciadores)
-  gold:        '#ffd426',  // dorado (monedas, puntos)
-  green:       '#00ff88',  // verde neón (éxito, combos)
+  // Neón principal — 
+  primary:     '#3a86ff',  // azul eléctrico
+  accent:      '#ff006e',  // rosa neón
+  purple:      '#8338ec',  // púrpura vibrante
+  gold:        '#ffbe0b',  // dorado casino
+  green:       '#00ff88',  // verde neón (éxito)
+  orange:      '#fb5607',  // naranja fuego (combos)
 
   // Oscuros
   dark:        '#0a1f3d',
@@ -29,21 +25,21 @@ export const colors = {
 
   // Bolas de billar
   balls: {
-    1:  '#f5c518',  // amarillo
-    2:  '#1a6fc4',  // azul
-    3:  '#e63232',  // rojo
-    4:  '#7b2fff',  // morado
-    5:  '#ff6b1a',  // naranja
-    6:  '#16a34a',  // verde
-    7:  '#c2410c',  // marrón
-    8:  '#1a1a1a',  // negra
-    9:  '#f5c518',  // rayada amarilla
-    10: '#1a6fc4',  // rayada azul
-    11: '#e63232',  // rayada roja
-    12: '#7b2fff',  // rayada morada
-    13: '#ff6b1a',  // rayada naranja
-    14: '#16a34a',  // rayada verde
-    15: '#c2410c',  // rayada marrón
+    1:  '#f5c518',
+    2:  '#1a6fc4',
+    3:  '#e63232',
+    4:  '#7b2fff',
+    5:  '#ff6b1a',
+    6:  '#16a34a',
+    7:  '#c2410c',
+    8:  '#1a1a1a',
+    9:  '#f5c518',
+    10: '#1a6fc4',
+    11: '#e63232',
+    12: '#7b2fff',
+    13: '#ff6b1a',
+    14: '#16a34a',
+    15: '#c2410c',
   }
 };
 

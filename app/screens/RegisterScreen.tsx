@@ -145,14 +145,14 @@ export default function RegisterScreen({ navigation }: any) {
                 <View key={i} style={[styles.pixelDot, { opacity: i % 2 === 0 ? 1 : 0.2 }]} />
               ))}
             </View>
-            <Text style={styles.prompt}>{'> NUEVA PARTIDA_'}</Text>
+            <Text style={styles.prompt}>{'> REGISTRATE!'}</Text>
           </View>
 
           {/* Formulario */}
           <View style={styles.card}>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>{'// JUGADOR'}</Text>
+              <Text style={styles.fieldLabel}>{'// NOMBRE'}</Text>
               <TextInput
                 style={styles.input}
                 placeholder="tu nombre aquí"
