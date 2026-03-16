@@ -9,6 +9,7 @@ import { colors } from '../config/theme';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
+import BillarScreen from './screens/BillarScreen'; // Cambio 1
 
 const Stack = createNativeStackNavigator();
 
@@ -38,7 +39,10 @@ export default function Index() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {usuario ? (
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <>  {/*Cambio 2 */}
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Billar" component={BillarScreen} /> {/* Cambio 3 */}
+        </>
       ) : (
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
