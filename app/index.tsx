@@ -6,10 +6,10 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { auth } from '../config/firebase';
 import { colors } from '../config/theme';
+import BillarScreen from './screens/BillarScreen'; // Cambio 1
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
-import BillarScreen from './screens/BillarScreen'; // Cambio 1
 
 const Stack = createNativeStackNavigator();
 
@@ -37,18 +37,18 @@ export default function Index() {
   );
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {usuario ? (
-        <>  {/*Cambio 2 */}
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="Billar" component={BillarScreen} /> {/* Cambio 3 */}
-        </>
-      ) : (
-        <>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-        </>
-      )}
-    </Stack.Navigator>
-  );
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    {usuario ? (
+      <Stack.Group>
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Billar" component={BillarScreen} />
+      </Stack.Group>
+    ) : (
+      <Stack.Group>
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Register" component={RegisterScreen} />
+      </Stack.Group>
+    )}
+  </Stack.Navigator>
+);
 }
