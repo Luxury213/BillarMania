@@ -121,12 +121,12 @@ export default function HomeScreen() {
         <View style={styles.buttonsRow}>
 
           <Animated.View style={{ transform: [{ translateY: btn1Float }] }}>
-            <TouchableOpacity activeOpacity={0.8} onPress={() => {}}>
-              <View style={[styles.btnInner, { backgroundColor: colors.primary }]}>
-                <Text style={styles.btnText}>JUGAR</Text>
-              </View>
-              <View style={[styles.btnShadow, { backgroundColor: '#1a5fb4' }]} />
-            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.8} onPress={onJugar}>
+  <View style={[styles.btnInner, { backgroundColor: colors.primary }]}>
+    <Text style={styles.btnText}>JUGAR</Text>
+  </View>
+  <View style={[styles.btnShadow, { backgroundColor: '#1a5fb4' }]} />
+</TouchableOpacity>
           </Animated.View>
 
           <Animated.View style={{ transform: [{ translateY: btn2Float }] }}>
