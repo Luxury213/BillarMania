@@ -31,7 +31,7 @@ function CRTOverlay() {
   );
 }
 
-export default function HomeScreen() {
+export default function HomeScreen({ onJugar }: { onJugar: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const btn1Float = useRef(new Animated.Value(0)).current;
   const btn2Float = useRef(new Animated.Value(0)).current;
