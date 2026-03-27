@@ -1,5 +1,5 @@
 import Matter from 'matter-js';
-import { W, H, BAND, BALL_R, POCKET_R, BALL_DATA, POCKETS } from './constants';
+import { BALL_DATA, BALL_R, BAND, H, POCKET_R, POCKETS, W } from './constants';
 
 const { Engine, Bodies, Body, World, Events } = Matter;
 
@@ -32,23 +32,49 @@ export function createWalls(world: Matter.World) {
 }
 
 export function createBalls(world: Matter.World): BallObj[] {
-  const opts = { restitution: 0.95, friction: 0.005, frictionAir: 0.018, label: 'ball' };
-  const spacing = BALL_R * 2.15;
+  const opts = {
+    restitution: 0.92,
+    friction: 0.005,
+    frictionAir: 0.018,
+    label: 'ball',
+  };
+
+  const spacing = BALL_R * 2.08;
   const cx = W * 0.63;
   const cy = H / 2;
-  const positions: { x: number; y: number }[] = [];
 
-  for (let r = 0; r < 5; r++) {
-    for (let c = 0; c <= r; c++) {
+  // Triángulo: 5 filas → 15 posiciones
+  const positions: { x: number; y: number }[] = [];
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col <= row; col++) {
       positions.push({
-        x: cx + r * spacing * Math.cos(Math.PI / 6),
-        y: cy + (c - r / 2) * spacing,
+        x: cx + row * spacing * Math.cos(Math.PI / 6),
+        y: cy + (col - row / 2) * spacing,
       });
     }
   }
 
-  const shuffled = [...BALL_DATA].sort(() => Math.random() - 0.5);
-  return shuffled.map((data, i) => {
+  const solids  = BALL_DATA.filter(b => b.solid);
+  const stripes = BALL_DATA.filter(b => !b.solid);
+  const eight   = BALL_DATA.find(b => b.n === 8)!;
+
+  const arrangement: typeof BALL_DATA = new Array(15).fill(null);
+  arrangement[0] = solids[0];  // vértice: bola 1
+  arrangement[4] = eight;       // centro: bola 8
+
+  let si = 1, ri = 0;
+  for (let i = 0; i < 15; i++) {
+    if (arrangement[i]) continue;
+    if (si < solids.length && i % 2 === 1) {
+      arrangement[i] = solids[si++];
+    } else if (ri < stripes.length) {
+      arrangement[i] = stripes[ri++];
+    } else {
+      arrangement[i] = solids[si++];
+    }
+  }
+
+  return arrangement.map((data, i) => {
     const body = Bodies.circle(positions[i].x, positions[i].y, BALL_R, { ...opts });
     World.add(world, body);
     return { body, data, pocketed: false };

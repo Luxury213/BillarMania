@@ -1,14 +1,17 @@
-import { Canvas, Circle, Line, Paint, Path, Rect, Text as SkText, useFont } from '@shopify/react-native-skia';
+import { Canvas, Circle, Line, Rect } from '@shopify/react-native-skia';
 import Matter from 'matter-js';
 import { useEffect, useRef, useState } from 'react';
-import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
-import { useSharedValue, useAnimatedReaction, runOnJS } from 'react-native-reanimated';
-import { W, H, BAND, BALL_R, POCKET_R, POCKETS, BALL_DATA } from './constants';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import { BALL_R, BAND, H, POCKET_R, POCKETS, W } from './constants';
 import {
-  createEngine, createWalls, createBalls, createCueBall,
-  checkPockets, allStopped, BallObj,
+  allStopped, BallObj,
+  checkPockets,
+  createBalls, createCueBall,
+  createEngine, createWalls,
 } from './physics';
+const CUE_LENGTH = W * 0.55;
 
 type GameState = 'aiming' | 'charging' | 'rolling' | 'placing' | 'won';
 
@@ -21,6 +24,8 @@ export default function BillarGame() {
   const [score, setScore] = useState(0);
   const [gameState, setGameState] = useState<GameState>('aiming');
   const [tick, setTick] = useState(0); // fuerza re-render del canvas
+  const [renderAngle, setRenderAngle] = useState(0);
+  const [renderPower, setRenderPower] = useState(0);
 
   const aimAngle = useSharedValue(0);
   const chargePower = useSharedValue(0);
@@ -84,11 +89,14 @@ export default function BillarGame() {
       mouseX.value = e.x;
       mouseY.value = e.y;
       if (stateRef.current === 'aiming' && cueBallRef.current) {
-        const cp = cueBallRef.current.position;
-        aimAngle.value = Math.atan2(e.y - cp.y, e.x - cp.x);
-        chargeStart.value = Date.now();
-        runOnJS(setState)('charging');
-      } else if (stateRef.current === 'placing') {
+          const cp = cueBallRef.current.position;
+          const a  = Math.atan2(e.y - cp.y, e.x - cp.x);
+          aimAngle.value    = a;
+          chargeStart.value = Date.now();
+          runOnJS(setRenderAngle)(a);
+          runOnJS(setRenderPower)(0);
+          runOnJS(setState)('charging');
+}         else if (stateRef.current === 'placing') {
         // colocar bola en mano
         const nx = Math.max(BAND + BALL_R, Math.min(W * 0.4, e.x));
         const ny = Math.max(BAND + BALL_R, Math.min(H - BAND - BALL_R, e.y));
@@ -103,10 +111,19 @@ export default function BillarGame() {
       mouseX.value = e.x;
       mouseY.value = e.y;
       if (stateRef.current === 'charging' && cueBallRef.current) {
-        const cp = cueBallRef.current.position;
-        aimAngle.value = Math.atan2(e.y - cp.y, e.x - cp.x);
-        chargePower.value = Math.min((Date.now() - chargeStart.value) / 12, 100);
-      }
+  const cp    = cueBallRef.current?.position;
+const balls = ballsRef.current;
+
+const cueOffset = BALL_R + 4 + (renderPower / 100) * BALL_R * 3;
+const showCue   = cp && (gameState === 'aiming' || gameState === 'charging');
+
+const cueX1 = cp ? cp.x - Math.cos(renderAngle) * (cueOffset + CUE_LENGTH) : 0;
+const cueY1 = cp ? cp.y - Math.sin(renderAngle) * (cueOffset + CUE_LENGTH) : 0;
+const cueX2 = cp ? cp.x - Math.cos(renderAngle) * cueOffset : 0;
+const cueY2 = cp ? cp.y - Math.sin(renderAngle) * cueOffset : 0;
+const tipX1 = cp ? cueX2 - Math.cos(renderAngle) * (CUE_LENGTH * 0.12) : 0;
+const tipY1 = cp ? cueY2 - Math.sin(renderAngle) * (CUE_LENGTH * 0.12) : 0;
+}
     })
     .onEnd(() => {
       if (stateRef.current === 'charging' && cueBallRef.current) {
@@ -117,7 +134,9 @@ export default function BillarGame() {
           y: Math.sin(angle) * power * 0.055,
         });
         chargePower.value = 0;
+        runOnJS(setRenderPower)(0);   // ← línea nueva
         runOnJS(setState)('rolling');
+      
       }
     });
 
@@ -182,7 +201,14 @@ export default function BillarGame() {
               <Rect x={BAND} y={H - BAND + 6} width={(W - BAND * 2) * (chargePower.value / 100)} height={8} color="#E24B4A" />
             </>
           )}
+          {gameState === 'charging' && (
+            <>
+              <Rect x={BAND} y={H - BAND + 6} width={W - BAND * 2} height={8} color="rgba(0,0,0,0.3)" />
+              <Rect x={BAND} y={H - BAND + 6} width={(W - BAND * 2) * (chargePower.value / 100)} height={8} color="#E24B4A" />
+            </>
+          )}
         </Canvas>
+        
       </GestureDetector>
     </GestureHandlerRootView>
   );
