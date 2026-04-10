@@ -1,18 +1,26 @@
 import {
-  Canvas, Circle, Line, Rect, Image, useImage,
+  Canvas,
+  Image,
+  Line,
+  useImage
 } from '@shopify/react-native-skia';
 import Matter from 'matter-js';
 import { useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
-  GestureDetector, Gesture, GestureHandlerRootView,
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
 } from 'react-native-gesture-handler';
-import { View, StyleSheet, Text, TouchableOpacity, Dimensions } from 'react-native';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
-import { W, H, BAND, BALL_R, POCKET_R, POCKETS } from './constants';
+import { BALL_R, BAND, H, W } from './constants';
 import {
-  createEngine, createWalls, createBalls, createCueBall,
-  checkPockets, allStopped, applyTableFriction, shootCueBall,
+  allStopped, applyTableFriction,
   BallObj,
+  checkPockets,
+  createBalls, createCueBall,
+  createEngine, createWalls,
+  shootCueBall,
 } from './physics';
 
 type GameState = 'aiming' | 'charging' | 'rolling' | 'placing' | 'won';
@@ -37,23 +45,24 @@ export default function BillarGame() {
   // imágenes
   const tableImg = useImage(require('../assets/images/billar/table.png'));
   const cueImg   = useImage(require('../assets/images/billar/cue.png'));
-  const ballImgs = [
-    useImage(require('../assets/images/billar/ball_0.png')),
-    useImage(require('../assets/images/billar/ball_1.png')),
-    useImage(require('../assets/images/billar/ball_2.png')),
-    useImage(require('../assets/images/billar/ball_3.png')),
-    useImage(require('../assets/images/billar/ball_4.png')),
-    useImage(require('../assets/images/billar/ball_5.png')),
-    useImage(require('../assets/images/billar/ball_6.png')),
-    useImage(require('../assets/images/billar/ball_7.png')),
-    useImage(require('../assets/images/billar/ball_8.png')),
-    useImage(require('../assets/images/billar/ball_9.png')),
-    useImage(require('../assets/images/billar/ball_10.png')),
-    useImage(require('../assets/images/billar/ball_11.png')),
-    useImage(require('../assets/images/billar/ball_13.png')),
-    useImage(require('../assets/images/billar/ball_14.png')),
-    useImage(require('../assets/images/billar/ball_15.png')),
-  ];
+const ballImgs = [
+  useImage(require('../assets/images/billar/ball_0.png')),
+  useImage(require('../assets/images/billar/ball_1.png')),
+  useImage(require('../assets/images/billar/ball_2.png')),
+  useImage(require('../assets/images/billar/ball_3.png')),
+  useImage(require('../assets/images/billar/ball_4.png')),
+  useImage(require('../assets/images/billar/ball_5.png')),
+  useImage(require('../assets/images/billar/ball_6.png')),
+  useImage(require('../assets/images/billar/ball_7.png')),
+  useImage(require('../assets/images/billar/ball_8.png')),
+  useImage(require('../assets/images/billar/ball_9.png')),
+  useImage(require('../assets/images/billar/ball_10.png')),
+  useImage(require('../assets/images/billar/ball_11.png')),
+  useImage(require('../assets/images/billar/ball_12.png')),
+  useImage(require('../assets/images/billar/ball_13.png')),
+  useImage(require('../assets/images/billar/ball_14.png')),
+  useImage(require('../assets/images/billar/ball_15.png')),
+];
 
   function setState(s: GameState) {
     stateRef.current = s;
