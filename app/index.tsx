@@ -1,15 +1,13 @@
-import { onAuthStateChanged } from 'firebase/auth';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
-import { auth } from '../config/firebase';
 import GameScreen from './screens/GameScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
+import RegisterScreen from './screens/RegisterScreen';
 
 export default function Index() {
   const [usuario, setUsuario] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [enJuego, setEnJuego] = useState(false);
+  const [enRegistro, setEnRegistro] = useState(false);
 
   useEffect(() => {
     const unsuscribe = onAuthStateChanged(auth, (user) => {
@@ -27,7 +25,11 @@ export default function Index() {
     );
   }
 
-  if (!usuario) return <LoginScreen />;
+  if (!usuario) {
+    if (enRegistro) return <RegisterScreen onLogin={() => setEnRegistro(false)} />;
+    return <LoginScreen onRegister={() => setEnRegistro(true)} />;
+  }
+
   if (enJuego) return <GameScreen />;
   return <HomeScreen onJugar={() => setEnJuego(true)} />;
 }
