@@ -6,10 +6,15 @@
 // ============================================================
 
 import {
-  Canvas, Circle, Group, Line,
+  Canvas,
+  Circle,
+  Group,
+  Line,
   matchFont,
-  Path, RoundedRect,
-  Skia, Text as SkText,
+  Path,
+  RoundedRect,
+  Skia,
+  Text as SkText,
   vec
 } from '@shopify/react-native-skia';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -34,9 +39,9 @@ const C = {
 };
 
 // ─── DIMENSIONES ─────────────────────────────────────────────
-const SCREEN  = Dimensions.get('window');
-const W       = Math.max(SCREEN.width, SCREEN.height);
-const H       = Math.min(SCREEN.width, SCREEN.height);
+const SCREEN   = Dimensions.get('window');
+const W        = Math.max(SCREEN.width, SCREEN.height);
+const H        = Math.min(SCREEN.width, SCREEN.height);
 const MARGIN_H = W * 0.05;
 const MARGIN_V = H * 0.13;
 const TABLE_X  = MARGIN_H;
@@ -55,34 +60,36 @@ const CUE_W    = 5;
 
 // ─── BOLAS ───────────────────────────────────────────────────
 const BALL_COLORS: Record<number, string> = {
-  0: '#ffffff', 1: '#ffbe0b', 2: '#3a86ff', 3: '#ff006e',
-  4: '#8338ec', 5: '#fb5607', 6: '#00ff88', 7: '#c2410c',
-  8: '#222222', 9: '#ffbe0b', 10: '#3a86ff', 11: '#ff006e',
+  0:  '#ffffff',
+  1:  '#ffbe0b', 2:  '#3a86ff', 3:  '#ff006e',
+  4:  '#8338ec', 5:  '#fb5607', 6:  '#00ff88', 7:  '#c2410c',
+  8:  '#222222',
+  9:  '#ffbe0b', 10: '#3a86ff', 11: '#ff006e',
   12: '#8338ec', 13: '#fb5607', 14: '#00ff88', 15: '#c2410c',
 };
 const BALL_POINTS: Record<number, number> = { 8: 300 };
-for (let i = 1; i <= 7;  i++) BALL_POINTS[i] = 100;
+for (let i = 1; i <= 7; i++) BALL_POINTS[i] = 100;
 for (let i = 9; i <= 15; i++) BALL_POINTS[i] = 150;
 
 // ─── TRONERAS ────────────────────────────────────────────────
 const POCKETS = [
-  { x: PLAY_X,             y: PLAY_Y },
-  { x: PLAY_X + PLAY_W/2,  y: PLAY_Y - 4 },
-  { x: PLAY_X + PLAY_W,    y: PLAY_Y },
-  { x: PLAY_X,             y: PLAY_Y + PLAY_H },
+  { x: PLAY_X,             y: PLAY_Y             },
+  { x: PLAY_X + PLAY_W/2,  y: PLAY_Y - 4         },
+  { x: PLAY_X + PLAY_W,    y: PLAY_Y             },
+  { x: PLAY_X,             y: PLAY_Y + PLAY_H    },
   { x: PLAY_X + PLAY_W/2,  y: PLAY_Y + PLAY_H + 4 },
-  { x: PLAY_X + PLAY_W,    y: PLAY_Y + PLAY_H },
+  { x: PLAY_X + PLAY_W,    y: PLAY_Y + PLAY_H    },
 ];
 
 // ─── TIPOS ───────────────────────────────────────────────────
-interface BallState { id: number; x: number; y: number }
+interface BallState    { id: number; x: number; y: number }
 interface FloatingText { id: number; text: string; x: number; y: number; opacity: number; vy: number }
-interface PocketFlash { id: number; x: number; y: number; r: number; opacity: number }
+interface PocketFlash  { id: number; x: number; y: number; r: number; opacity: number; color: string }
 
 // ─── RACK ────────────────────────────────────────────────────
 function getRackPositions(ballIds: number[]) {
-  const cx = PLAY_X + PLAY_W * 0.67;
-  const cy = PLAY_Y + PLAY_H / 2;
+  const cx   = PLAY_X + PLAY_W * 0.67;
+  const cy   = PLAY_Y + PLAY_H / 2;
   const rows = [[0],[1,2],[3,8,4],[5,6,7,9],[10,11,12,13,14]];
   const out: { id: number; x: number; y: number }[] = [];
   let idx = 0;
@@ -91,8 +98,8 @@ function getRackPositions(ballIds: number[]) {
       if (idx >= ballIds.length) return;
       out.push({
         id: ballIds[idx++],
-        x: cx + r * BALL_R * 2.05,
-        y: cy + (c - (row.length - 1) / 2) * BALL_R * 2.05,
+        x:  cx + r * BALL_R * 2.05,
+        y:  cy + (c - (row.length - 1) / 2) * BALL_R * 2.05,
       });
     });
   });
@@ -101,33 +108,152 @@ function getRackPositions(ballIds: number[]) {
 
 // ─── FUENTE SKIA ─────────────────────────────────────────────
 const fontStyle = { fontFamily: 'monospace', fontSize: BALL_R * 0.9, fontWeight: 'bold' } as const;
-const skFont = matchFont(fontStyle);
+const skFont    = matchFont(fontStyle);
 
 // ─── COMPONENTE ──────────────────────────────────────────────
 export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
-  const engineRef   = useRef<Matter.Engine | null>(null);
-  const runnerRef   = useRef<Matter.Runner | null>(null);
-  const bodiesRef   = useRef<Map<number, Matter.Body>>(new Map());
-  const frameRef    = useRef<number>(0);
-  const aimStartRef = useRef<{ x: number; y: number } | null>(null);
-  const phaseRef    = useRef<string>('aiming');
-  const floatIdRef  = useRef(0);
-  const flashIdRef  = useRef(0);
+  const engineRef    = useRef<Matter.Engine | null>(null);
+  const runnerRef    = useRef<Matter.Runner | null>(null);
+  const bodiesRef    = useRef<Map<number, Matter.Body>>(new Map());
+  const frameRef     = useRef<number>(0);
+  const loopActiveRef = useRef(false);
+  const aimStartRef  = useRef<{ x: number; y: number } | null>(null);
+  const phaseRef     = useRef<'aiming' | 'shooting'>('aiming');
+  const floatIdRef   = useRef(0);
+  const flashIdRef   = useRef(0);
 
   const [balls,         setBalls]         = useState<BallState[]>([]);
+  const [phase,         setPhase]         = useState<'aiming' | 'shooting' | 'roundOver'>('aiming');
   const [aimStart,      setAimStart]      = useState<{ x: number; y: number } | null>(null);
   const [aimEnd,        setAimEnd]        = useState<{ x: number; y: number } | null>(null);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
   const [pocketFlashes, setPocketFlashes] = useState<PocketFlash[]>([]);
-  const [gameState, setGameState] = useState({
+  const [gameState,     setGameState]     = useState({
     score: 0, round: 1, shots: 6, maxShots: 6,
-    threshold: 500, coins: 150, chainCount: 0,
-    bounceCount: 0, phase: 'aiming' as 'aiming' | 'shooting' | 'roundOver',
+    threshold: 500, coins: 150, chainCount: 0, bounceCount: 0,
   });
+
+  // ── LOOP (una sola instancia) ──────────────────────────────
+  const startLoop = useCallback(() => {
+    if (loopActiveRef.current) return;
+    loopActiveRef.current = true;
+
+    const loop = () => {
+      if (!loopActiveRef.current) return;
+
+      // Sync bolas desde Matter
+      const newBalls: BallState[] = [];
+      bodiesRef.current.forEach((body, id) => {
+        newBalls.push({ id, x: body.position.x, y: body.position.y });
+      });
+      setBalls([...newBalls]);
+
+      // Detectar parada
+      const allStop = Array.from(bodiesRef.current.values()).every(
+        b => Math.abs(b.velocity.x) < 0.12 && Math.abs(b.velocity.y) < 0.12
+      );
+      if (allStop && phaseRef.current === 'shooting') {
+        phaseRef.current = 'aiming';
+        setGameState(prev => {
+          const nextPhase = prev.shots <= 0 ? 'roundOver' : 'aiming';
+          setPhase(nextPhase);
+          return { ...prev, bounceCount: 0, chainCount: 0 };
+        });
+      }
+
+      // Animar textos flotantes
+      setFloatingTexts(prev =>
+        prev
+          .map(t  => ({ ...t, y: t.y + t.vy, opacity: t.opacity - 0.018 }))
+          .filter(t => t.opacity > 0)
+      );
+
+      // Animar flashes de tronera
+      setPocketFlashes(prev =>
+        prev
+          .map(f  => ({ ...f, r: f.r + 1.5, opacity: f.opacity - 0.06 }))
+          .filter(f => f.opacity > 0)
+      );
+
+      frameRef.current = requestAnimationFrame(loop);
+    };
+    frameRef.current = requestAnimationFrame(loop);
+  }, []);
+
+  // ── TRONERAS ──────────────────────────────────────────────
+  const handlePockets = useCallback((bodyA: Matter.Body, bodyB: Matter.Body) => {
+    [bodyA, bodyB].forEach(body => {
+      if (!body.label.startsWith('ball_')) return;
+      const ballId = (body as any).ballId as number;
+      POCKETS.forEach(p => {
+        const dx = body.position.x - p.x;
+        const dy = body.position.y - p.y;
+        if (Math.sqrt(dx*dx + dy*dy) >= POCKET_R + BALL_R * 0.8) return;
+
+        if (ballId === 0) {
+          // Foul — reponer bola blanca sin penalización
+          Matter.Body.setPosition(body, { x: PLAY_X + PLAY_W * 0.25, y: PLAY_Y + PLAY_H / 2 });
+          Matter.Body.setVelocity(body, { x: 0, y: 0 });
+          return;
+        }
+
+        if (!engineRef.current) return;
+        Matter.World.remove(engineRef.current.world, body);
+        bodiesRef.current.delete(ballId);
+
+        const isStripe = ballId >= 9 && ballId <= 15;
+        // ✅ CORREGIDO: strings completos sin cerrar para añadir opacidad después
+        const flashColor = ballId === 8
+          ? 'rgba(255,190,11,'
+          : isStripe
+            ? 'rgba(180,120,255,'
+            : 'rgba(255,190,11,';
+
+        setPocketFlashes(prev => [...prev, {
+          id: flashIdRef.current++,
+          x: p.x, y: p.y, r: POCKET_R,
+          opacity: 1,
+          color: flashColor,
+        }]);
+
+        setGameState(prev => {
+          const base     = BALL_POINTS[ballId] ?? 100;
+          const bMult    = prev.bounceCount >= 3 ? 4
+                         : prev.bounceCount === 2 ? 3
+                         : prev.bounceCount === 1 ? 2 : 1;
+          const newChain = prev.chainCount + 1;
+          const cMult    = newChain >= 3 ? 2.5 : newChain === 2 ? 1.5 : 1;
+          const earned   = Math.round(base * bMult * cMult);
+          const coinBonus = Math.floor(earned / 50);
+
+          const label = bMult > 1 || cMult > 1
+            ? `+${earned} ×${(bMult * cMult).toFixed(1)}`
+            : `+${earned}`;
+
+          setFloatingTexts(ft => [...ft, {
+            id: floatIdRef.current++,
+            text: label, x: p.x, y: p.y - 20, opacity: 1, vy: -1.2,
+          }]);
+
+          return {
+            ...prev,
+            score:      prev.score + earned,
+            coins:      prev.coins + coinBonus,
+            chainCount: newChain,
+          };
+        });
+      });
+    });
+  }, []);
 
   // ── INICIALIZAR ────────────────────────────────────────────
   const initRound = useCallback((round: number, prevCoins: number, prevScore: number) => {
+    // Detener loop y limpiar motor anterior
+    loopActiveRef.current = false;
+    cancelAnimationFrame(frameRef.current);
+
     if (engineRef.current) {
+      Matter.Events.off(engineRef.current, 'collisionStart');
       Matter.Runner.stop(runnerRef.current!);
       Matter.Engine.clear(engineRef.current);
       bodiesRef.current.clear();
@@ -140,18 +266,20 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
 
     const wo = { isStatic: true, restitution: 0.85, friction: 0, label: 'wall' };
     Matter.World.add(engine.world, [
-      Matter.Bodies.rectangle(PLAY_X + PLAY_W/2, PLAY_Y - 5,          PLAY_W, 10, wo),
-      Matter.Bodies.rectangle(PLAY_X + PLAY_W/2, PLAY_Y + PLAY_H + 5, PLAY_W, 10, wo),
-      Matter.Bodies.rectangle(PLAY_X - 5,        PLAY_Y + PLAY_H/2,   10, PLAY_H, wo),
-      Matter.Bodies.rectangle(PLAY_X + PLAY_W+5, PLAY_Y + PLAY_H/2,   10, PLAY_H, wo),
+      Matter.Bodies.rectangle(PLAY_X + PLAY_W/2, PLAY_Y - 5,           PLAY_W, 10, wo),
+      Matter.Bodies.rectangle(PLAY_X + PLAY_W/2, PLAY_Y + PLAY_H + 5,  PLAY_W, 10, wo),
+      Matter.Bodies.rectangle(PLAY_X - 5,        PLAY_Y + PLAY_H/2,    10, PLAY_H, wo),
+      Matter.Bodies.rectangle(PLAY_X + PLAY_W+5, PLAY_Y + PLAY_H/2,    10, PLAY_H, wo),
     ]);
 
-    // Bolas de la ronda — más bolas cada ronda
     const ballCount = Math.min(4 + round, 15);
     const ids = [1,2,3,4,5,6,7,9,10,11,12,13,14,15,8].slice(0, ballCount);
-    // La 8 siempre al centro (posición 4)
-    const pos8 = ids.indexOf(8);
-    if (pos8 !== -1 && pos8 !== 4) { [ids[4], ids[pos8]] = [ids[pos8], ids[4]]; }
+    if (ballCount >= 5) {
+      const pos8 = ids.indexOf(8);
+      if (pos8 !== -1 && pos8 !== 4) {
+        [ids[4], ids[pos8]] = [ids[pos8], ids[4]];
+      }
+    }
 
     getRackPositions(ids).forEach(({ id, x, y }) => {
       const body = Matter.Bodies.circle(x, y, BALL_R, {
@@ -183,114 +311,32 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
 
     Matter.Runner.run(runner, engine);
 
-    const maxShots = Math.max(6 - Math.floor(round / 2), 3);
+    const maxShots  = Math.max(6 - Math.floor(round / 2), 3);
     const threshold = Math.round(500 * Math.pow(1.6, round - 1));
     phaseRef.current = 'aiming';
+    setPhase('aiming');
     setGameState({
       score: prevScore, round, shots: maxShots, maxShots,
-      threshold, coins: prevCoins, chainCount: 0,
-      bounceCount: 0, phase: 'aiming',
+      threshold, coins: prevCoins, chainCount: 0, bounceCount: 0,
     });
     setFloatingTexts([]);
     setPocketFlashes([]);
-  }, []);
+  }, [handlePockets]);
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT);
     initRound(1, 150, 0);
     startLoop();
     return () => {
+      loopActiveRef.current = false;
       cancelAnimationFrame(frameRef.current);
       if (runnerRef.current) Matter.Runner.stop(runnerRef.current);
-      if (engineRef.current) Matter.Engine.clear(engineRef.current);
+      if (engineRef.current) {
+        Matter.Events.off(engineRef.current, 'collisionStart');
+        Matter.Engine.clear(engineRef.current);
+      }
       ScreenOrientation.unlockAsync();
     };
-  }, []);
-
-  // ── LOOP ───────────────────────────────────────────────────
-  const startLoop = () => {
-    const loop = () => {
-      const newBalls: BallState[] = [];
-      bodiesRef.current.forEach((body, id) => {
-        newBalls.push({ id, x: body.position.x, y: body.position.y });
-      });
-      setBalls([...newBalls]);
-
-      const allStop = Array.from(bodiesRef.current.values()).every(
-        b => Math.abs(b.velocity.x) < 0.12 && Math.abs(b.velocity.y) < 0.12
-      );
-      if (allStop && phaseRef.current === 'shooting') {
-        phaseRef.current = 'aiming';
-        setGameState(prev => ({ ...prev, phase: 'aiming', bounceCount: 0, chainCount: 0 }));
-      }
-
-      // Animar textos flotantes
-      setFloatingTexts(prev =>
-        prev.map(t => ({ ...t, y: t.y + t.vy, opacity: t.opacity - 0.018 }))
-            .filter(t => t.opacity > 0)
-      );
-
-      // Animar flashes de tronera
-      setPocketFlashes(prev =>
-        prev.map(f => ({ ...f, r: f.r + 1.5, opacity: f.opacity - 0.06 }))
-            .filter(f => f.opacity > 0)
-      );
-
-      frameRef.current = requestAnimationFrame(loop);
-    };
-    frameRef.current = requestAnimationFrame(loop);
-  };
-
-  // ── TRONERAS ──────────────────────────────────────────────
-  const handlePockets = useCallback((bodyA: Matter.Body, bodyB: Matter.Body) => {
-    [bodyA, bodyB].forEach(body => {
-      if (!body.label.startsWith('ball_')) return;
-      const ballId = (body as any).ballId as number;
-      POCKETS.forEach(p => {
-        const dx = body.position.x - p.x;
-        const dy = body.position.y - p.y;
-        if (Math.sqrt(dx*dx + dy*dy) < POCKET_R + BALL_R * 0.8) {
-          if (ballId === 0) {
-            // Foul — reponer bola blanca
-            Matter.Body.setPosition(body, { x: PLAY_X + PLAY_W * 0.25, y: PLAY_Y + PLAY_H/2 });
-            Matter.Body.setVelocity(body, { x: 0, y: 0 });
-          } else {
-            Matter.World.remove(engineRef.current!.world, body);
-            bodiesRef.current.delete(ballId);
-
-            // Flash en tronera
-            setPocketFlashes(prev => [...prev, {
-              id: flashIdRef.current++, x: p.x, y: p.y, r: POCKET_R, opacity: 1,
-            }]);
-
-            setGameState(prev => {
-              const base      = BALL_POINTS[ballId] ?? 100;
-              const bMult     = prev.bounceCount >= 3 ? 4 : prev.bounceCount === 2 ? 3 : prev.bounceCount === 1 ? 2 : 1;
-              const newChain  = prev.chainCount + 1;
-              const cMult     = newChain >= 3 ? 2.5 : newChain === 2 ? 1.5 : 1;
-              const earned    = Math.round(base * bMult * cMult);
-              const coinBonus = Math.floor(earned / 50);
-
-              // Texto flotante
-              const label = bMult > 1 || cMult > 1
-                ? `+${earned} ×${(bMult * cMult).toFixed(1)}`
-                : `+${earned}`;
-              setFloatingTexts(ft => [...ft, {
-                id: floatIdRef.current++, text: label,
-                x: p.x, y: p.y - 20, opacity: 1, vy: -1.2,
-              }]);
-
-              return {
-                ...prev,
-                score:      prev.score + earned,
-                coins:      prev.coins + coinBonus,
-                chainCount: newChain,
-              };
-            });
-          }
-        }
-      });
-    });
   }, []);
 
   // ── DISPARO ───────────────────────────────────────────────
@@ -311,16 +357,17 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     const start = aimStartRef.current;
     if (!cue || !start || phaseRef.current !== 'aiming') {
       aimStartRef.current = null;
-      setAimStart(null); setAimEnd(null);
+      setAimStart(null);
+      setAimEnd(null);
       return;
     }
+
     setGameState(prev => {
       if (prev.shots <= 0) return prev;
-      const next = { ...prev, shots: prev.shots - 1, phase: 'shooting' as const };
-      if (next.shots === 0) phaseRef.current = 'shooting';
-      else phaseRef.current = 'shooting';
-      return next;
+      return { ...prev, shots: prev.shots - 1 };
     });
+
+    phaseRef.current = 'shooting';
 
     const dx   = start.x - rx;
     const dy   = start.y - ry;
@@ -329,8 +376,10 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
       const power = Math.min(dist * 0.055, 14);
       Matter.Body.setVelocity(cue, { x: (dx/dist)*power, y: (dy/dist)*power });
     }
+
     aimStartRef.current = null;
-    setAimStart(null); setAimEnd(null);
+    setAimStart(null);
+    setAimEnd(null);
   };
 
   const gesture = Gesture.Pan()
@@ -345,10 +394,9 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
   };
 
   // ── RENDER ────────────────────────────────────────────────
-  const cp    = getCueBall();
+  const cp     = getCueBall();
   const hasAim = aimStart && aimEnd && cp;
 
-  // Dirección del disparo
   let aimDx = 0, aimDy = 0, aimDist = 0;
   if (hasAim) {
     aimDx   = aimStart!.x - aimEnd!.x;
@@ -357,8 +405,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     if (aimDist > 0) { aimDx /= aimDist; aimDy /= aimDist; }
   }
 
-  // Ronda terminada
-  const roundOver = gameState.shots === 0 && phaseRef.current === 'aiming';
+  const roundOver = phase === 'roundOver';
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -369,11 +416,25 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
           <Text style={styles.hudLabel}>RONDA</Text>
           <Text style={[styles.hudVal, { color: C.accent }]}>{gameState.round}</Text>
         </View>
+
+        <View style={styles.hudSep} />
+
         <View style={styles.hudBlock}>
           <Text style={styles.hudLabel}>PUNTOS</Text>
           <Text style={[styles.hudVal, { color: C.gold }]}>{gameState.score}</Text>
           <Text style={styles.hudSub}>META {gameState.threshold}</Text>
         </View>
+
+        {/* Barra de progreso hacia la meta */}
+        <View style={styles.progressBar}>
+          <View style={[
+            styles.progressFill,
+            { width: `${Math.min(100, (gameState.score / gameState.threshold) * 100)}%` }
+          ]} />
+        </View>
+
+        <View style={styles.hudSep} />
+
         <View style={styles.hudBlock}>
           <Text style={styles.hudLabel}>TIROS</Text>
           <View style={styles.shotsRow}>
@@ -385,10 +446,16 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
             ))}
           </View>
         </View>
+
+        <View style={styles.hudSep} />
+
         <View style={styles.hudBlock}>
           <Text style={styles.hudLabel}>MONEDAS</Text>
-          <Text style={[styles.hudVal, { color: C.gold }]}>{gameState.coins}</Text>
+          <Text style={[styles.hudVal, { color: C.gold }]}>
+            🪙 {gameState.coins}
+          </Text>
         </View>
+
         {onSalir && (
           <TouchableOpacity onPress={onSalir} style={styles.exitBtn}>
             <Text style={styles.exitText}>✕</Text>
@@ -402,9 +469,17 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
           <Canvas style={StyleSheet.absoluteFill}>
 
             {/* Madera exterior */}
-            <RoundedRect x={TABLE_X-8} y={TABLE_Y-8} width={TABLE_W+16} height={TABLE_H+16} r={8} color={C.tableBorder} />
+            <RoundedRect
+              x={TABLE_X-8} y={TABLE_Y-8}
+              width={TABLE_W+16} height={TABLE_H+16}
+              r={8} color={C.tableBorder}
+            />
             {/* Fieltro */}
-            <RoundedRect x={TABLE_X} y={TABLE_Y} width={TABLE_W} height={TABLE_H} r={4} color={C.tableFelt} />
+            <RoundedRect
+              x={TABLE_X} y={TABLE_Y}
+              width={TABLE_W} height={TABLE_H}
+              r={4} color={C.tableFelt}
+            />
             {/* Bandas */}
             <RoundedRect x={TABLE_X} y={TABLE_Y} width={TABLE_W} height={CUSHION} r={3} color={C.cushion} />
             <RoundedRect x={TABLE_X} y={TABLE_Y+TABLE_H-CUSHION} width={TABLE_W} height={CUSHION} r={3} color={C.cushion} />
@@ -417,27 +492,33 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               p2={vec(PLAY_X + PLAY_W*0.33, PLAY_Y+PLAY_H)}
               color="rgba(255,255,255,0.07)" strokeWidth={1}
             />
-            <Circle cx={PLAY_X+PLAY_W*0.33} cy={PLAY_Y+PLAY_H/2} r={4} color="rgba(255,255,255,0.15)" />
+            <Circle
+              cx={PLAY_X+PLAY_W*0.33} cy={PLAY_Y+PLAY_H/2}
+              r={4} color="rgba(255,255,255,0.15)"
+            />
 
-            {/* Troneras */}
+            {/* Troneras — con borde neón */}
             {POCKETS.map((p, i) => (
               <React.Fragment key={i}>
+                <Circle cx={p.x} cy={p.y} r={POCKET_R+6} color="rgba(0,255,136,0.08)" />
                 <Circle cx={p.x} cy={p.y} r={POCKET_R+4} color="#050505" />
-                <Circle cx={p.x} cy={p.y} r={POCKET_R} color="#111" />
+                <Circle cx={p.x} cy={p.y} r={POCKET_R}   color="#0d0d0d" />
               </React.Fragment>
             ))}
 
-            {/* Flashes de tronera */}
+            {/* Flashes de tronera - ✅ CORREGIDO: sin paréntesis extra */}
             {pocketFlashes.map(f => (
-              <Circle key={f.id} cx={f.x} cy={f.y} r={f.r}
-                color={`rgba(255,190,11,${f.opacity.toFixed(2)})`} />
+              <Circle
+                key={f.id} cx={f.x} cy={f.y} r={f.r}
+                color={`${f.color}${f.opacity.toFixed(2)}`}
+              />
             ))}
 
-            {/* Línea de guía desde la bola blanca */}
-            {hasAim && aimDist > 8 && Array.from({ length: 10 }).map((_, i) => {
-              const t1 = BALL_R + (i/10) * PLAY_W * 0.5;
-              const t2 = BALL_R + ((i+0.45)/10) * PLAY_W * 0.5;
-              const alpha = 0.7 - i * 0.06;
+            {/* Línea de guía — más segmentos, degradado más suave */}
+            {hasAim && aimDist > 8 && Array.from({ length: 16 }).map((_, i) => {
+              const t1    = BALL_R + (i/16) * PLAY_W * 0.55;
+              const t2    = BALL_R + ((i+0.4)/16) * PLAY_W * 0.55;
+              const alpha = Math.max(0, 0.75 - i * 0.048);
               return (
                 <Line key={i}
                   p1={vec(cp!.x + aimDx*t1, cp!.y + aimDy*t1)}
@@ -450,16 +531,16 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
 
             {/* Taco */}
             {hasAim && aimDist > 8 && cp && (() => {
-              const gap     = BALL_R + 6 + Math.min(aimDist * 0.15, 20);
-              const x1      = cp.x - aimDx * gap;
-              const y1      = cp.y - aimDy * gap;
-              const x2      = cp.x - aimDx * (gap + CUE_LEN);
-              const y2      = cp.y - aimDy * (gap + CUE_LEN);
-              const perpX   = -aimDy;
-              const perpY   =  aimDx;
-              const tipW    = CUE_W * 0.4;
-              const buttW   = CUE_W * 1.6;
-              const path    = Skia.Path.Make();
+              const gap   = BALL_R + 6 + Math.min(aimDist * 0.15, 20);
+              const x1    = cp.x - aimDx * gap;
+              const y1    = cp.y - aimDy * gap;
+              const x2    = cp.x - aimDx * (gap + CUE_LEN);
+              const y2    = cp.y - aimDy * (gap + CUE_LEN);
+              const perpX = -aimDy;
+              const perpY =  aimDx;
+              const tipW  = CUE_W * 0.4;
+              const buttW = CUE_W * 1.6;
+              const path  = Skia.Path.Make();
               path.moveTo(x1 + perpX*tipW,  y1 + perpY*tipW);
               path.lineTo(x1 - perpX*tipW,  y1 - perpY*tipW);
               path.lineTo(x2 - perpX*buttW, y2 - perpY*buttW);
@@ -468,7 +549,6 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               return (
                 <Group>
                   <Path path={path} color="#8B5E3C" />
-                  {/* Punta del taco */}
                   <Circle cx={x1} cy={y1} r={tipW} color="#c8a97a" />
                 </Group>
               );
@@ -478,6 +558,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
             {balls.map(ball => {
               const color    = BALL_COLORS[ball.id] ?? '#fff';
               const isStripe = ball.id >= 9 && ball.id <= 15;
+              const is8ball  = ball.id === 8;
               const label    = ball.id === 0 ? '' : String(ball.id);
               const fontSize = BALL_R * 0.85;
               const textX    = ball.x - (label.length > 1 ? fontSize*0.6 : fontSize*0.3);
@@ -486,17 +567,25 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               return (
                 <React.Fragment key={ball.id}>
                   {/* Sombra */}
-                  <Circle cx={ball.x+2} cy={ball.y+3} r={BALL_R+1} color="rgba(0,0,0,0.35)" />
+                  <Circle cx={ball.x+2} cy={ball.y+3} r={BALL_R+1} color="rgba(0,0,0,0.4)" />
+
+                  {/* Halo dorado bola 8 */}
+                  {is8ball && (
+                    <Circle cx={ball.x} cy={ball.y} r={BALL_R+3} color="rgba(255,190,11,0.18)" />
+                  )}
+
                   {/* Cuerpo */}
                   <Circle cx={ball.x} cy={ball.y} r={BALL_R} color={color} />
+
                   {/* Banda rayada */}
                   {isStripe && (
                     <>
-                      <Circle cx={ball.x} cy={ball.y} r={BALL_R} color="rgba(255,255,255,0.88)" />
+                      <Circle cx={ball.x} cy={ball.y} r={BALL_R}      color="rgba(255,255,255,0.88)" />
                       <Circle cx={ball.x} cy={ball.y} r={BALL_R*0.58} color={color} />
                     </>
                   )}
-                  {/* Círculo blanco del número */}
+
+                  {/* Círculo del número */}
                   {ball.id !== 0 && (
                     <>
                       <Circle cx={ball.x} cy={ball.y} r={BALL_R*0.42} color="rgba(255,255,255,0.92)" />
@@ -505,6 +594,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                       )}
                     </>
                   )}
+
                   {/* Brillo */}
                   <Circle
                     cx={ball.x - BALL_R*0.28} cy={ball.y - BALL_R*0.28}
@@ -514,9 +604,10 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               );
             })}
 
-            {/* Textos flotantes de puntos */}
+            {/* Textos flotantes */}
             {floatingTexts.map(t => skFont && (
-              <SkText key={t.id} x={t.x - 20} y={t.y} text={t.text} font={skFont}
+              <SkText
+                key={t.id} x={t.x - 20} y={t.y} text={t.text} font={skFont}
                 color={`rgba(255,190,11,${Math.min(t.opacity, 1).toFixed(2)})`}
               />
             ))}
@@ -535,18 +626,24 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
             {gameState.score} / {gameState.threshold} pts
           </Text>
           {gameState.score >= gameState.threshold ? (
-            <TouchableOpacity style={styles.overlayBtn} onPress={() => {
-              const coinsBonus = gameState.shots * 15;
-              initRound(gameState.round + 1, gameState.coins + coinsBonus, gameState.score);
-              startLoop();
-            }}>
+            <TouchableOpacity
+              style={styles.overlayBtn}
+              onPress={() => {
+                const coinsBonus = gameState.shots * 15;
+                initRound(gameState.round + 1, gameState.coins + coinsBonus, gameState.score);
+                startLoop();
+              }}
+            >
               <Text style={styles.overlayBtnText}>SIGUIENTE RONDA →</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={[styles.overlayBtn, { borderColor: C.primary }]} onPress={() => {
-              initRound(gameState.round, gameState.coins, gameState.score);
-              startLoop();
-            }}>
+            <TouchableOpacity
+              style={[styles.overlayBtn, { borderColor: C.primary }]}
+              onPress={() => {
+                initRound(gameState.round, gameState.coins, gameState.score);
+                startLoop();
+              }}
+            >
               <Text style={[styles.overlayBtnText, { color: C.primary }]}>REINTENTAR</Text>
             </TouchableOpacity>
           )}
@@ -569,6 +666,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: C.primary + '33', zIndex: 10,
   },
   hudBlock:  { alignItems: 'center' },
+  hudSep:    { width: 1, height: '40%', backgroundColor: 'rgba(255,255,255,0.07)' },
   hudLabel:  { color: '#555', fontSize: 8, letterSpacing: 2, textTransform: 'uppercase' },
   hudVal:    { fontSize: 18, fontWeight: 'bold', letterSpacing: 1 },
   hudSub:    { color: '#444', fontSize: 8, letterSpacing: 1 },
@@ -577,9 +675,18 @@ const styles = StyleSheet.create({
   exitBtn:   { padding: 8 },
   exitText:  { color: '#555', fontSize: 16 },
 
+  progressBar: {
+    width: 60, height: 4, backgroundColor: '#1a1a2e',
+    borderRadius: 2, overflow: 'hidden', marginTop: 4,
+  },
+  progressFill: {
+    height: '100%', backgroundColor: C.green,
+    borderRadius: 2,
+  },
+
   overlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(6,9,16,0.9)',
+    backgroundColor: 'rgba(6,9,16,0.92)',
     alignItems: 'center', justifyContent: 'center', zIndex: 20,
   },
   overlayTitle: {

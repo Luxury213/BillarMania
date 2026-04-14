@@ -1,3 +1,7 @@
+import { onAuthStateChanged } from 'firebase/auth';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import { auth } from '../config/firebase'; // Ajusta la ruta real
 import GameScreen from './screens/GameScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -10,11 +14,11 @@ export default function Index() {
   const [enRegistro, setEnRegistro] = useState(false);
 
   useEffect(() => {
-    const unsuscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUsuario(user);
       setCargando(false);
     });
-    return unsuscribe;
+    return unsubscribe;
   }, []);
 
   if (cargando) {
@@ -30,6 +34,6 @@ export default function Index() {
     return <LoginScreen onRegister={() => setEnRegistro(true)} />;
   }
 
-  if (enJuego) return <GameScreen />;
+  if (enJuego) return <GameScreen onSalir={() => setEnJuego(false)} />;
   return <HomeScreen onJugar={() => setEnJuego(true)} />;
 }
