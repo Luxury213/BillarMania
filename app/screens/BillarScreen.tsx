@@ -1,4 +1,4 @@
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import BillarGame from '../../game/BillarGame';
 
 export default function BillarScreen() {
