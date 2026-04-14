@@ -1,5 +1,5 @@
 import Matter from 'matter-js';
-import { W, H, BAND, BALL_R, POCKET_R, BALL_DATA, POCKETS } from './constants';
+import { BALL_DATA, BALL_R, BAND, H, POCKET_R, POCKETS, W } from './constants';
 
 const { Engine, Bodies, Body, World } = Matter;
 
