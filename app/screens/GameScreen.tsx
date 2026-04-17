@@ -1,264 +1,366 @@
 // ============================================================
-// GameScreen.tsx — BillarMania
-// Mesa de billar con Matter.js + React Native Skia
-// Estética Neon Noir / Pixel Art inspirada en Balatro
-// Universidad Santiago de Cali — Computación Móvil 2026
+// GameScreen.tsx — BillarMania (CORREGIDO - MESA VISIBLE)
 // ============================================================
 
 import {
-  Canvas,
-  Circle,
-  Group,
-  Line,
-  matchFont,
-  Path,
-  RoundedRect,
-  Skia,
-  Text as SkText,
-  vec
+  Canvas, Circle, Group, Line,
+  matchFont, Path, Rect, RoundedRect,
+  Skia, Text as SkText, vec,
 } from '@shopify/react-native-skia';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import Matter from 'matter-js';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Dimensions,
+  StyleSheet, Text, TouchableOpacity,
+  Vibration, View
+} from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // ─── COLORES ─────────────────────────────────────────────────
 const C = {
   primary:     '#3a86ff',
   accent:      '#ff006e',
-  purple:      '#8338ec',
   gold:        '#ffbe0b',
   green:       '#00ff88',
-  orange:      '#fb5607',
   bg:          '#060910',
   tableFelt:   '#0a2e1a',
   tableBorder: '#4a2800',
   cushion:     '#1a4a25',
 };
 
-// ─── DIMENSIONES ─────────────────────────────────────────────
-const SCREEN   = Dimensions.get('window');
-const W        = Math.max(SCREEN.width, SCREEN.height);
-const H        = Math.min(SCREEN.width, SCREEN.height);
-const MARGIN_H = W * 0.05;
-const MARGIN_V = H * 0.13;
-const TABLE_X  = MARGIN_H;
-const TABLE_Y  = MARGIN_V;
-const TABLE_W  = W - MARGIN_H * 2;
-const TABLE_H  = H - MARGIN_V - H * 0.04;
-const CUSHION  = 20;
-const PLAY_X   = TABLE_X + CUSHION;
-const PLAY_Y   = TABLE_Y + CUSHION;
-const PLAY_W   = TABLE_W - CUSHION * 2;
-const PLAY_H   = TABLE_H - CUSHION * 2;
-const POCKET_R = 15;
-const BALL_R   = Math.min(PLAY_W, PLAY_H) * 0.036;
-const CUE_LEN  = BALL_R * 14;
-const CUE_W    = 5;
+// ─── DIMENSIONES (FORZADAS A LANDSCAPE) ─────────────────────
+const { width, height } = Dimensions.get('window');
 
-// ─── BOLAS ───────────────────────────────────────────────────
-const BALL_COLORS: Record<number, string> = {
-  0:  '#ffffff',
-  1:  '#ffbe0b', 2:  '#3a86ff', 3:  '#ff006e',
-  4:  '#8338ec', 5:  '#fb5607', 6:  '#00ff88', 7:  '#c2410c',
-  8:  '#222222',
-  9:  '#ffbe0b', 10: '#3a86ff', 11: '#ff006e',
-  12: '#8338ec', 13: '#fb5607', 14: '#00ff88', 15: '#c2410c',
-};
-const BALL_POINTS: Record<number, number> = { 8: 300 };
-for (let i = 1; i <= 7; i++) BALL_POINTS[i] = 100;
-for (let i = 9; i <= 15; i++) BALL_POINTS[i] = 150;
+// FORZAMOS landscape: W = el más grande, H = el más pequeño
+const W = Math.max(width, height);
+const H = Math.min(width, height);
+
+console.log('🎱 Dimensiones:', { W, H, original: { width, height } });
+
+const HUD_H = H * 0.12;
+const MARGIN_H = W * 0.05;
+const MARGIN_V = HUD_H + H * 0.02;
+
+const TABLE_X = MARGIN_H;
+const TABLE_Y = MARGIN_V;
+const TABLE_W = W - (MARGIN_H * 2);
+const TABLE_H = H - MARGIN_V - H * 0.08;
+
+const CUSHION = Math.min(18, TABLE_W * 0.025);
+const PLAY_X = TABLE_X + CUSHION;
+const PLAY_Y = TABLE_Y + CUSHION;
+const PLAY_W = TABLE_W - CUSHION * 2;
+const PLAY_H = TABLE_H - CUSHION * 2;
+
+const POCKET_R = Math.min(16, PLAY_W * 0.02);
+const BALL_R = Math.min(PLAY_W, PLAY_H) * 0.038;
+
+const CUE_LEN = BALL_R * 14;
+const CUE_W = 5;
+const MAX_DRAG = 160;
+
+console.log('🎱 Mesa:', { TABLE_X, TABLE_Y, TABLE_W, TABLE_H, PLAY_W, PLAY_H, BALL_R });
 
 // ─── TRONERAS ────────────────────────────────────────────────
 const POCKETS = [
-  { x: PLAY_X,             y: PLAY_Y             },
-  { x: PLAY_X + PLAY_W/2,  y: PLAY_Y - 4         },
-  { x: PLAY_X + PLAY_W,    y: PLAY_Y             },
-  { x: PLAY_X,             y: PLAY_Y + PLAY_H    },
-  { x: PLAY_X + PLAY_W/2,  y: PLAY_Y + PLAY_H + 4 },
-  { x: PLAY_X + PLAY_W,    y: PLAY_Y + PLAY_H    },
+  { x: PLAY_X,              y: PLAY_Y },
+  { x: PLAY_X + PLAY_W / 2, y: PLAY_Y - 4 },
+  { x: PLAY_X + PLAY_W,     y: PLAY_Y },
+  { x: PLAY_X,              y: PLAY_Y + PLAY_H },
+  { x: PLAY_X + PLAY_W / 2, y: PLAY_Y + PLAY_H + 4 },
+  { x: PLAY_X + PLAY_W,     y: PLAY_Y + PLAY_H },
 ];
+
+// ─── PUNTOS ──────────────────────────────────────────────────
+const BALL_POINTS: Record<number, number> = { 8: 200 };
+for (let i = 1; i <= 7;  i++) BALL_POINTS[i] = 60;
+for (let i = 9; i <= 15; i++) BALL_POINTS[i] = 90;
+
+const BALL_COLORS: Record<number, string> = {
+  0: '#ffffff', 1: '#ffbe0b', 2: '#3a86ff', 3: '#ff006e',
+  4: '#8338ec', 5: '#fb5607', 6: '#00ff88', 7: '#c2410c',
+  8: '#222222', 9: '#ffbe0b', 10: '#3a86ff', 11: '#ff006e',
+  12: '#8338ec', 13: '#fb5607', 14: '#00ff88', 15: '#c2410c',
+};
+
+// ─── RACK (CORREGIDO — sin duplicados en bola 8) ─────────────
+function getRackPositions() {
+  const cx      = PLAY_X + PLAY_W * 0.72;
+  const cy      = PLAY_Y + PLAY_H / 2;
+  const spacing = BALL_R * 1.95;
+
+  // IDs fijos por posición en el triángulo (bola 8 en centro, fila 3 col 2)
+  const layout = [
+    [1],
+    [2, 3],
+    [4, 8, 5],   // 8 en el centro
+    [6, 7, 9, 10],
+    [11, 12, 13, 14, 15],
+  ];
+
+  const positions: { id: number; x: number; y: number }[] = [];
+  layout.forEach((row, r) => {
+    const numBalls = row.length;
+    const startY   = cy - (numBalls - 1) * spacing / 2;
+    const x        = cx + r * spacing;
+    row.forEach((id, c) => {
+      positions.push({ id, x, y: startY + c * spacing });
+    });
+  });
+  return positions;
+}
 
 // ─── TIPOS ───────────────────────────────────────────────────
 interface BallState    { id: number; x: number; y: number }
-interface FloatingText { id: number; text: string; x: number; y: number; opacity: number; vy: number }
-interface PocketFlash  { id: number; x: number; y: number; r: number; opacity: number; color: string }
-
-// ─── RACK ────────────────────────────────────────────────────
-function getRackPositions(ballIds: number[]) {
-  const cx   = PLAY_X + PLAY_W * 0.67;
-  const cy   = PLAY_Y + PLAY_H / 2;
-  const rows = [[0],[1,2],[3,8,4],[5,6,7,9],[10,11,12,13,14]];
-  const out: { id: number; x: number; y: number }[] = [];
-  let idx = 0;
-  rows.forEach((row, r) => {
-    row.forEach((_, c) => {
-      if (idx >= ballIds.length) return;
-      out.push({
-        id: ballIds[idx++],
-        x:  cx + r * BALL_R * 2.05,
-        y:  cy + (c - (row.length - 1) / 2) * BALL_R * 2.05,
-      });
-    });
-  });
-  return out;
+interface FloatingText { id: number; text: string; x: number; y: number; opacity: number; vy: number; color: string }
+interface PocketFlash  { id: number; x: number; y: number; r: number; opacity: number }
+interface Particle     { id: number; x: number; y: number; vx: number; vy: number; life: number; color: string }
+interface ShotData {
+  pocketed: { ballId: number; px: number; py: number; bounces: number }[];
+  bounces: number; chainCount: number; shotsLeft: number;
+  score: number; coins: number; threshold: number; round: number; maxShots: number;
 }
 
-// ─── FUENTE SKIA ─────────────────────────────────────────────
-const fontStyle = { fontFamily: 'monospace', fontSize: BALL_R * 0.9, fontWeight: 'bold' } as const;
-const skFont    = matchFont(fontStyle);
+// ─── CÁLCULO DE PUNTOS ───────────────────────────────────────
+function calcShot(pocketed: { ballId: number; bounces: number }[], chainCount: number) {
+  if (pocketed.length === 0) return { earned: 0, coinBonus: 0, newChain: 0, label: '', color: C.gold };
 
-// ─── COMPONENTE ──────────────────────────────────────────────
-export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
-  const engineRef    = useRef<Matter.Engine | null>(null);
-  const runnerRef    = useRef<Matter.Runner | null>(null);
-  const bodiesRef    = useRef<Map<number, Matter.Body>>(new Map());
-  const frameRef     = useRef<number>(0);
-  const loopActiveRef = useRef(false);
-  const aimStartRef  = useRef<{ x: number; y: number } | null>(null);
-  const phaseRef     = useRef<'aiming' | 'shooting'>('aiming');
-  const floatIdRef   = useRef(0);
-  const flashIdRef   = useRef(0);
+  const baseTotal = pocketed.reduce((s, p) => s + (BALL_POINTS[p.ballId] ?? 60), 0);
+  const n = pocketed.length;
 
-  const [balls,         setBalls]         = useState<BallState[]>([]);
-  const [phase,         setPhase]         = useState<'aiming' | 'shooting' | 'roundOver'>('aiming');
-  const [aimStart,      setAimStart]      = useState<{ x: number; y: number } | null>(null);
-  const [aimEnd,        setAimEnd]        = useState<{ x: number; y: number } | null>(null);
-  const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
-  const [pocketFlashes, setPocketFlashes] = useState<PocketFlash[]>([]);
-  const [gameState,     setGameState]     = useState({
-    score: 0, round: 1, shots: 6, maxShots: 6,
-    threshold: 500, coins: 150, chainCount: 0, bounceCount: 0,
+  let multCantidad = 1, color = C.gold;
+  if (n === 2) { multCantidad = 1.8; }
+  else if (n >= 3) { multCantidad = 2.5; }
+
+  const ballIds  = pocketed.map(p => p.ballId).sort((a, b) => a - b);
+  let isScale    = ballIds.length >= 2;
+  for (let i = 1; i < ballIds.length; i++) if (ballIds[i] !== ballIds[i - 1] + 1) { isScale = false; break; }
+  const multEscala = isScale ? 1.5 : 1;
+  if (multEscala > 1) color = C.green;
+
+  const hasBounce  = pocketed.some(p => p.bounces >= 1);
+  const multBounce = hasBounce ? 1.3 : 1;
+  if (hasBounce && color === C.gold) color = C.primary;
+
+  const newChain   = pocketed.length > 0 ? chainCount + 1 : 0;
+  let multCadena   = 1;
+  if (newChain === 2) multCadena = 1.2;
+  else if (newChain >= 3) multCadena = 1.5;
+  if (multCadena > 1) color = C.accent;
+
+  const totalMult  = multCantidad * multEscala * multBounce * multCadena;
+  const earned     = Math.floor(baseTotal * totalMult);
+  const coinBonus  = Math.floor(earned / 60);
+
+  const parts = [`+${earned}`];
+  if (multCantidad > 1) parts.push(`${n}B×${multCantidad}`);
+  if (multEscala > 1)   parts.push(`ESC×1.5`);
+  if (multBounce > 1)   parts.push(`REB×1.3`);
+  if (multCadena > 1)   parts.push(`CH×${multCadena}`);
+
+  return { earned, coinBonus, newChain, label: parts.join(' '), color };
+}
+
+// ─── FUENTE ──────────────────────────────────────────────────
+const skFont = matchFont({ fontFamily: 'monospace', fontSize: BALL_R * 0.85, fontWeight: 'bold' } as any);
+
+// ─── COMPONENTE PRINCIPAL ────────────────────────────────────
+export default function GameScreen({
+  onSalir,
+  onRoundWin,
+  inventory = [],
+  initialCoins = 150,
+}: {
+  onSalir?: () => void;
+  onRoundWin?: (score: number, coins: number, round: number) => void;
+  inventory?: string[];
+  initialCoins?: number;
+}) {
+  // Refs físicas
+  const engineRef        = useRef<Matter.Engine | null>(null);
+  const runnerRef        = useRef<Matter.Runner | null>(null);
+  const bodiesRef        = useRef<Map<number, Matter.Body>>(new Map());
+  const frameRef         = useRef<number>(0);
+  const ballBouncesRef   = useRef<Map<number, number>>(new Map());
+  const floatIdRef       = useRef(0);
+  const flashIdRef       = useRef(0);
+  const particleIdRef    = useRef(0);
+  const phaseRef         = useRef<'aiming' | 'shooting'>('aiming');
+  const resolvingRef     = useRef(false);
+  const shotDataRef      = useRef<ShotData>({
+    pocketed: [], bounces: 0, chainCount: 0,
+    shotsLeft: 5, score: 0, coins: initialCoins,
+    threshold: 300, round: 1, maxShots: 5,
   });
 
-  // ── LOOP (una sola instancia) ──────────────────────────────
-  const startLoop = useCallback(() => {
-    if (loopActiveRef.current) return;
-    loopActiveRef.current = true;
+  // Potenciadores desde inventory prop
+  const hasPowerup       = (id: string) => inventory.includes(id);
+  const powerMultiplier  = hasPowerup('power_boost')      ? 1.3 : 1;
+  const extraShots       = hasPowerup('extra_shots')      ? 1   : 0;
+  const coinMultiplier   = hasPowerup('coin_boost')       ? 1.2 : 1;
+  const hasShield        = hasPowerup('shield');
+  const pointMultiplier  = hasPowerup('point_multiplier') ? 1.2 : 1;
 
-    const loop = () => {
-      if (!loopActiveRef.current) return;
+  // Shared values gesture
+  const svStep    = useSharedValue<0 | 1 | 2>(0);
+  const svOriginX = useSharedValue(0);
+  const svOriginY = useSharedValue(0);
 
-      // Sync bolas desde Matter
-      const newBalls: BallState[] = [];
-      bodiesRef.current.forEach((body, id) => {
-        newBalls.push({ id, x: body.position.x, y: body.position.y });
+  // Refs JS puros
+  const aimDirRef = useRef<{ x: number; y: number } | null>(null);
+  const cuePosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Estados UI
+  const [balls, setBalls]               = useState<BallState[]>([]);
+  const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
+  const [pocketFlashes, setPocketFlashes] = useState<PocketFlash[]>([]);
+  const [particles, setParticles]       = useState<Particle[]>([]);
+  const [gamePhase, setGamePhase]       = useState<'aiming' | 'shooting' | 'roundOver' | 'gameWin'>('aiming');
+  const [displayState, setDisplayState] = useState({
+    score: 0, round: 1, shots: 5, maxShots: 5,
+    threshold: 300, coins: initialCoins, chainCount: 0,
+  });
+  const [shootUI, setShootUI] = useState<{
+    step: 0 | 1 | 2; dir: { x: number; y: number } | null;
+    power: number; cuePos: { x: number; y: number } | null;
+    lineEnd: { x: number; y: number } | null;
+  }>({ step: 0, dir: null, power: 0, cuePos: null, lineEnd: null });
+
+  const [debugMode, setDebugMode]           = useState(true);  // ✅ ACTIVADO POR DEFECTO
+  const [showDebugBounds, setShowDebugBounds] = useState(true); // ✅ ACTIVADO POR DEFECTO
+
+  // ─── EFECTOS VISUALES ──────────────────────────────────────
+  const addParticles = (x: number, y: number, color: string, count = 12) => {
+    const arr: Particle[] = [];
+    for (let i = 0; i < count; i++) {
+      arr.push({
+        id: particleIdRef.current++,
+        x: x + (Math.random() - 0.5) * 15,
+        y: y + (Math.random() - 0.5) * 15,
+        vx: (Math.random() - 0.5) * 5,
+        vy: (Math.random() - 0.5) * 5 - 2,
+        life: 1,
+        color,
       });
-      setBalls([...newBalls]);
+    }
+    setParticles(prev => [...prev, ...arr]);
+  };
 
-      // Detectar parada
-      const allStop = Array.from(bodiesRef.current.values()).every(
-        b => Math.abs(b.velocity.x) < 0.12 && Math.abs(b.velocity.y) < 0.12
-      );
-      if (allStop && phaseRef.current === 'shooting') {
-        phaseRef.current = 'aiming';
-        setGameState(prev => {
-          const nextPhase = prev.shots <= 0 ? 'roundOver' : 'aiming';
-          setPhase(nextPhase);
-          return { ...prev, bounceCount: 0, chainCount: 0 };
-        });
+  const resetShootUI = () => {
+    aimDirRef.current = null;
+    cuePosRef.current = null;
+    svStep.value = 0;
+    setShootUI({ step: 0, dir: null, power: 0, cuePos: null, lineEnd: null });
+  };
+
+  // ─── LOOP ──────────────────────────────────────────────────
+  const startLoop = useCallback(() => {
+    cancelAnimationFrame(frameRef.current);
+    const loop = () => {
+      const nb: BallState[] = [];
+      bodiesRef.current.forEach((b, id) => nb.push({ id, x: b.position.x, y: b.position.y }));
+      setBalls([...nb]);
+      setParticles(p => p.map(pt => ({ ...pt, x: pt.x + pt.vx, y: pt.y + pt.vy, life: pt.life - 0.025 })).filter(pt => pt.life > 0));
+      setFloatingTexts(p => p.map(t => ({ ...t, y: t.y + t.vy, opacity: t.opacity - 0.018 })).filter(t => t.opacity > 0));
+      setPocketFlashes(p => p.map(f => ({ ...f, r: f.r + 2, opacity: f.opacity - 0.05 })).filter(f => f.opacity > 0));
+      if (phaseRef.current === 'shooting' && !resolvingRef.current) {
+        const still = Array.from(bodiesRef.current.values()).every(
+          b => Math.abs(b.velocity.x) < 0.12 && Math.abs(b.velocity.y) < 0.12
+        );
+        if (still) resolveShot();
       }
-
-      // Animar textos flotantes
-      setFloatingTexts(prev =>
-        prev
-          .map(t  => ({ ...t, y: t.y + t.vy, opacity: t.opacity - 0.018 }))
-          .filter(t => t.opacity > 0)
-      );
-
-      // Animar flashes de tronera
-      setPocketFlashes(prev =>
-        prev
-          .map(f  => ({ ...f, r: f.r + 1.5, opacity: f.opacity - 0.06 }))
-          .filter(f => f.opacity > 0)
-      );
-
       frameRef.current = requestAnimationFrame(loop);
     };
     frameRef.current = requestAnimationFrame(loop);
   }, []);
 
-  // ── TRONERAS ──────────────────────────────────────────────
+  // ─── RESOLVER TIRO (BUG ESCUDO CORREGIDO) ──────────────────
+  const resolveShot = () => {
+    if (resolvingRef.current) return;
+    resolvingRef.current = true;
+    const sd = shotDataRef.current;
+
+    let { earned, coinBonus, newChain, label, color } = calcShot(sd.pocketed, sd.chainCount);
+    earned        = Math.floor(earned * pointMultiplier);
+    const finalCoinBonus = Math.floor(coinBonus * coinMultiplier);
+
+    if (earned > 0 && sd.pocketed.length > 0) {
+      const fp = sd.pocketed[0];
+      setFloatingTexts(ft => [...ft, {
+        id: floatIdRef.current++, text: label,
+        x: fp.px - label.length * 2.5, y: fp.py - 25,
+        opacity: 1, vy: -1.2, color,
+      }]);
+      addParticles(fp.px, fp.py, color, 14);
+    }
+
+    sd.chainCount = newChain;
+    sd.score      += earned;
+    sd.coins      += finalCoinBonus;
+
+    const noPocketed = sd.pocketed.length === 0;
+    sd.pocketed = [];
+    sd.bounces  = 0;
+
+    if (noPocketed && !hasShield) {
+      sd.chainCount = 0;
+    }
+
+    phaseRef.current = 'aiming';
+    const won   = sd.score >= sd.threshold;
+    const noAmmo = sd.shotsLeft <= 0;
+
+    setDisplayState({
+      score: sd.score, round: sd.round, shots: sd.shotsLeft,
+      maxShots: sd.maxShots, threshold: sd.threshold,
+      coins: sd.coins, chainCount: sd.chainCount,
+    });
+    setGamePhase(won || noAmmo ? 'roundOver' : 'aiming');
+    resetShootUI();
+    resolvingRef.current = false;
+
+    if (won && onRoundWin) {
+      onRoundWin(sd.score, sd.coins, sd.round);
+    }
+  };
+
+  // ─── TRONERAS ──────────────────────────────────────────────
   const handlePockets = useCallback((bodyA: Matter.Body, bodyB: Matter.Body) => {
     [bodyA, bodyB].forEach(body => {
       if (!body.label.startsWith('ball_')) return;
-      const ballId = (body as any).ballId as number;
+      const ballId: number = (body as any).ballId;
       POCKETS.forEach(p => {
-        const dx = body.position.x - p.x;
-        const dy = body.position.y - p.y;
-        if (Math.sqrt(dx*dx + dy*dy) >= POCKET_R + BALL_R * 0.8) return;
-
+        const dx = body.position.x - p.x, dy = body.position.y - p.y;
+        if (Math.sqrt(dx * dx + dy * dy) >= POCKET_R + BALL_R * 0.8) return;
         if (ballId === 0) {
-          // Foul — reponer bola blanca sin penalización
           Matter.Body.setPosition(body, { x: PLAY_X + PLAY_W * 0.25, y: PLAY_Y + PLAY_H / 2 });
           Matter.Body.setVelocity(body, { x: 0, y: 0 });
           return;
         }
-
         if (!engineRef.current) return;
         Matter.World.remove(engineRef.current.world, body);
         bodiesRef.current.delete(ballId);
-
-        const isStripe = ballId >= 9 && ballId <= 15;
-        // ✅ CORREGIDO: strings completos sin cerrar para añadir opacidad después
-        const flashColor = ballId === 8
-          ? 'rgba(255,190,11,'
-          : isStripe
-            ? 'rgba(180,120,255,'
-            : 'rgba(255,190,11,';
-
-        setPocketFlashes(prev => [...prev, {
-          id: flashIdRef.current++,
-          x: p.x, y: p.y, r: POCKET_R,
-          opacity: 1,
-          color: flashColor,
-        }]);
-
-        setGameState(prev => {
-          const base     = BALL_POINTS[ballId] ?? 100;
-          const bMult    = prev.bounceCount >= 3 ? 4
-                         : prev.bounceCount === 2 ? 3
-                         : prev.bounceCount === 1 ? 2 : 1;
-          const newChain = prev.chainCount + 1;
-          const cMult    = newChain >= 3 ? 2.5 : newChain === 2 ? 1.5 : 1;
-          const earned   = Math.round(base * bMult * cMult);
-          const coinBonus = Math.floor(earned / 50);
-
-          const label = bMult > 1 || cMult > 1
-            ? `+${earned} ×${(bMult * cMult).toFixed(1)}`
-            : `+${earned}`;
-
-          setFloatingTexts(ft => [...ft, {
-            id: floatIdRef.current++,
-            text: label, x: p.x, y: p.y - 20, opacity: 1, vy: -1.2,
-          }]);
-
-          return {
-            ...prev,
-            score:      prev.score + earned,
-            coins:      prev.coins + coinBonus,
-            chainCount: newChain,
-          };
-        });
+        const bounces = ballBouncesRef.current.get(ballId) ?? 0;
+        shotDataRef.current.pocketed.push({ ballId, px: p.x, py: p.y, bounces });
+        setPocketFlashes(pf => [...pf, { id: flashIdRef.current++, x: p.x, y: p.y, r: POCKET_R, opacity: 1 }]);
+        addParticles(p.x, p.y, C.gold, 8);
       });
     });
   }, []);
 
-  // ── INICIALIZAR ────────────────────────────────────────────
-  const initRound = useCallback((round: number, prevCoins: number, prevScore: number) => {
-    // Detener loop y limpiar motor anterior
-    loopActiveRef.current = false;
+  // ─── INICIAR RONDA ─────────────────────────────────────────
+  const initRound = useCallback((round: number, coins: number, score: number) => {
     cancelAnimationFrame(frameRef.current);
-
+    resolvingRef.current = false;
     if (engineRef.current) {
       Matter.Events.off(engineRef.current, 'collisionStart');
       Matter.Runner.stop(runnerRef.current!);
       Matter.Engine.clear(engineRef.current);
       bodiesRef.current.clear();
     }
-
     const engine = Matter.Engine.create({ gravity: { x: 0, y: 0 } });
     const runner = Matter.Runner.create();
     engineRef.current = engine;
@@ -266,33 +368,23 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
 
     const wo = { isStatic: true, restitution: 0.85, friction: 0, label: 'wall' };
     Matter.World.add(engine.world, [
-      Matter.Bodies.rectangle(PLAY_X + PLAY_W/2, PLAY_Y - 5,           PLAY_W, 10, wo),
-      Matter.Bodies.rectangle(PLAY_X + PLAY_W/2, PLAY_Y + PLAY_H + 5,  PLAY_W, 10, wo),
-      Matter.Bodies.rectangle(PLAY_X - 5,        PLAY_Y + PLAY_H/2,    10, PLAY_H, wo),
-      Matter.Bodies.rectangle(PLAY_X + PLAY_W+5, PLAY_Y + PLAY_H/2,    10, PLAY_H, wo),
+      Matter.Bodies.rectangle(PLAY_X + PLAY_W / 2, PLAY_Y - 5,          PLAY_W, 10, wo),
+      Matter.Bodies.rectangle(PLAY_X + PLAY_W / 2, PLAY_Y + PLAY_H + 5, PLAY_W, 10, wo),
+      Matter.Bodies.rectangle(PLAY_X - 5,          PLAY_Y + PLAY_H / 2, 10, PLAY_H, wo),
+      Matter.Bodies.rectangle(PLAY_X + PLAY_W + 5, PLAY_Y + PLAY_H / 2, 10, PLAY_H, wo),
     ]);
 
-    const ballCount = Math.min(4 + round, 15);
-    const ids = [1,2,3,4,5,6,7,9,10,11,12,13,14,15,8].slice(0, ballCount);
-    if (ballCount >= 5) {
-      const pos8 = ids.indexOf(8);
-      if (pos8 !== -1 && pos8 !== 4) {
-        [ids[4], ids[pos8]] = [ids[pos8], ids[4]];
-      }
-    }
-
-    getRackPositions(ids).forEach(({ id, x, y }) => {
-      const body = Matter.Bodies.circle(x, y, BALL_R, {
+    getRackPositions().forEach(({ id, x, y }) => {
+      const b = Matter.Bodies.circle(x, y, BALL_R, {
         restitution: 0.92, friction: 0.005,
         frictionAir: 0.018, density: 0.002, label: `ball_${id}`,
       });
-      (body as any).ballId = id;
-      bodiesRef.current.set(id, body);
-      Matter.World.add(engine.world, body);
+      (b as any).ballId = id;
+      bodiesRef.current.set(id, b);
+      Matter.World.add(engine.world, b);
     });
 
-    // Bola blanca
-    const cue = Matter.Bodies.circle(PLAY_X + PLAY_W * 0.25, PLAY_Y + PLAY_H/2, BALL_R, {
+    const cue = Matter.Bodies.circle(PLAY_X + PLAY_W * 0.25, PLAY_Y + PLAY_H / 2, BALL_R, {
       restitution: 0.92, friction: 0.005,
       frictionAir: 0.02, density: 0.002, label: 'ball_0',
     });
@@ -300,10 +392,17 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     bodiesRef.current.set(0, cue);
     Matter.World.add(engine.world, cue);
 
-    Matter.Events.on(engine, 'collisionStart', (event) => {
-      event.pairs.forEach(({ bodyA, bodyB }) => {
-        if (bodyA.label === 'wall' || bodyB.label === 'wall') {
-          setGameState(prev => ({ ...prev, bounceCount: prev.bounceCount + 1 }));
+    Matter.Events.on(engine, 'collisionStart', ev => {
+      ev.pairs.forEach(({ bodyA, bodyB }) => {
+        if (bodyA.label === 'wall' && bodyB.label.startsWith('ball_')) {
+          const bid: number = (bodyB as any).ballId;
+          ballBouncesRef.current.set(bid, (ballBouncesRef.current.get(bid) ?? 0) + 1);
+          shotDataRef.current.bounces += 1;
+        }
+        if (bodyB.label === 'wall' && bodyA.label.startsWith('ball_')) {
+          const bid: number = (bodyA as any).ballId;
+          ballBouncesRef.current.set(bid, (ballBouncesRef.current.get(bid) ?? 0) + 1);
+          shotDataRef.current.bounces += 1;
         }
         handlePockets(bodyA, bodyB);
       });
@@ -311,24 +410,34 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
 
     Matter.Runner.run(runner, engine);
 
-    const maxShots  = Math.max(6 - Math.floor(round / 2), 3);
-    const threshold = Math.round(500 * Math.pow(1.6, round - 1));
+    const maxShots  = 5 + extraShots;
+    const threshold = Math.round(300 * Math.pow(1.35, round - 1));
+    shotDataRef.current = {
+      pocketed: [], bounces: 0, chainCount: 0,
+      shotsLeft: maxShots, score, coins,
+      threshold, round, maxShots,
+    };
     phaseRef.current = 'aiming';
-    setPhase('aiming');
-    setGameState({
-      score: prevScore, round, shots: maxShots, maxShots,
-      threshold, coins: prevCoins, chainCount: 0, bounceCount: 0,
-    });
+    setGamePhase('aiming');
+    setDisplayState({ score, round, shots: maxShots, maxShots, threshold, coins, chainCount: 0 });
     setFloatingTexts([]);
     setPocketFlashes([]);
-  }, [handlePockets]);
+    setParticles([]);
+    ballBouncesRef.current.clear();
+    resetShootUI();
+  }, [handlePockets, extraShots]);
 
   useEffect(() => {
+    // 1. PRIMERO bloquear orientación
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT);
-    initRound(1, 150, 0);
-    startLoop();
+    
+    // 2. DESPUÉS de un pequeño delay, iniciar el juego
+    setTimeout(() => {
+      initRound(1, initialCoins, 0);
+      startLoop();
+    }, 100);
+    
     return () => {
-      loopActiveRef.current = false;
       cancelAnimationFrame(frameRef.current);
       if (runnerRef.current) Matter.Runner.stop(runnerRef.current);
       if (engineRef.current) {
@@ -339,369 +448,369 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     };
   }, []);
 
-  // ── DISPARO ───────────────────────────────────────────────
-  const handleAimStart = (x: number, y: number) => {
-    if (phaseRef.current !== 'aiming') return;
-    aimStartRef.current = { x, y };
-    setAimStart({ x, y });
-    setAimEnd({ x, y });
-  };
+  // ─── CALLBACKS GESTO ───────────────────────────────────────
+  const jsStartAim = useCallback((tx: number, ty: number) => {
+    if (phaseRef.current !== 'aiming') { svStep.value = 0; return; }
+    const cue = bodiesRef.current.get(0);
+    if (!cue) { svStep.value = 0; return; }
+    cuePosRef.current = { x: cue.position.x, y: cue.position.y };
+    aimDirRef.current = null;
+    setShootUI({ step: 1, dir: null, power: 0, cuePos: { x: cue.position.x, y: cue.position.y }, lineEnd: null });
+  }, []);
 
-  const handleAimMove = (x: number, y: number) => {
-    if (!aimStartRef.current) return;
-    setAimEnd({ x, y });
-  };
+  const jsUpdateAim = useCallback((tx: number, ty: number, ox: number, oy: number) => {
+    const cp = cuePosRef.current;
+    if (!cp) return;
+    const dx = tx - ox, dy = ty - oy, dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 6) return;
+    const dir     = { x: dx / dist, y: dy / dist };
+    const len     = Math.min(dist * 1.8, PLAY_W * 0.75);
+    const lineEnd = { x: cp.x + dir.x * len, y: cp.y + dir.y * len };
+    aimDirRef.current = dir;
+    setShootUI({ step: 1, dir, power: 0, cuePos: cp, lineEnd });
+  }, []);
 
-  const handleAimEnd = (rx: number, ry: number) => {
-    const cue   = bodiesRef.current.get(0);
-    const start = aimStartRef.current;
-    if (!cue || !start || phaseRef.current !== 'aiming') {
-      aimStartRef.current = null;
-      setAimStart(null);
-      setAimEnd(null);
-      return;
-    }
+  const jsConfirmDir = useCallback(() => {
+    const dir = aimDirRef.current, cp = cuePosRef.current;
+    if (!dir || !cp) { resetShootUI(); return; }
+    Vibration.vibrate(18);
+    const lineEnd = { x: cp.x + dir.x * PLAY_W * 0.5, y: cp.y + dir.y * PLAY_W * 0.5 };
+    setShootUI({ step: 2, dir, power: 0, cuePos: cp, lineEnd });
+  }, []);
 
-    setGameState(prev => {
-      if (prev.shots <= 0) return prev;
-      return { ...prev, shots: prev.shots - 1 };
-    });
+  const jsUpdateCharge = useCallback((dx: number, dy: number) => {
+    const dir = aimDirRef.current, cp = cuePosRef.current;
+    if (!dir || !cp) return;
+    const dot   = -(dx * dir.x + dy * dir.y);
+    const power = Math.max(0, Math.min(dot / MAX_DRAG, 1));
+    if (power >= 0.99) Vibration.vibrate(25);
+    const lineEnd = { x: cp.x + dir.x * PLAY_W * 0.5, y: cp.y + dir.y * PLAY_W * 0.5 };
+    setShootUI({ step: 2, dir, power, cuePos: cp, lineEnd });
+  }, []);
 
+  const jsFire = useCallback((dx: number, dy: number) => {
+    const dir = aimDirRef.current, cue = bodiesRef.current.get(0), sd = shotDataRef.current;
+    if (!dir || !cue || sd.shotsLeft <= 0 || phaseRef.current !== 'aiming') { resetShootUI(); return; }
+    const dot  = -(dx * dir.x + dy * dir.y);
+    let power  = Math.max(0, Math.min(dot / MAX_DRAG, 1));
+    if (power < 0.04) { resetShootUI(); return; }
+
+    const finalPower = Math.min(power * powerMultiplier, 1.2);
+    sd.shotsLeft  -= 1;
+    sd.pocketed    = [];
+    sd.bounces     = 0;
     phaseRef.current = 'shooting';
+    ballBouncesRef.current.clear();
+    setGamePhase('shooting');
+    setDisplayState(prev => ({ ...prev, shots: sd.shotsLeft }));
+    Matter.Body.setVelocity(cue, { x: dir.x * finalPower * 20, y: dir.y * finalPower * 20 });
+    setPocketFlashes(pf => [...pf, { id: flashIdRef.current++, x: cue.position.x, y: cue.position.y, r: BALL_R * 1.5, opacity: 0.6 }]);
+    addParticles(cue.position.x, cue.position.y, C.primary, 16);
+    Vibration.vibrate(40);
+    resetShootUI();
+  }, [powerMultiplier]);
 
-    const dx   = start.x - rx;
-    const dy   = start.y - ry;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if (dist > 5) {
-      const power = Math.min(dist * 0.055, 14);
-      Matter.Body.setVelocity(cue, { x: (dx/dist)*power, y: (dy/dist)*power });
-    }
-
-    aimStartRef.current = null;
-    setAimStart(null);
-    setAimEnd(null);
-  };
+  const jsCancel = useCallback(() => { resetShootUI(); }, []);
 
   const gesture = Gesture.Pan()
-    .onBegin(e  => runOnJS(handleAimStart)(e.x, e.y))
-    .onUpdate(e => runOnJS(handleAimMove)(e.x, e.y))
-    .onEnd(e    => runOnJS(handleAimEnd)(e.x, e.y));
+    .minDistance(0)
+    .onStart(e => {
+      'worklet';
+      if (svStep.value === 0) {
+        svStep.value = 1;
+        svOriginX.value = e.x; svOriginY.value = e.y;
+        runOnJS(jsStartAim)(e.x, e.y);
+      } else if (svStep.value === 1) {
+        svStep.value = 2;
+        svOriginX.value = e.x; svOriginY.value = e.y;
+        runOnJS(jsConfirmDir)();
+      }
+    })
+    .onUpdate(e => {
+      'worklet';
+      if (svStep.value === 1) runOnJS(jsUpdateAim)(e.x, e.y, svOriginX.value, svOriginY.value);
+      else if (svStep.value === 2) runOnJS(jsUpdateCharge)(e.x - svOriginX.value, e.y - svOriginY.value);
+    })
+    .onEnd(e => {
+      'worklet';
+      const dx = e.x - svOriginX.value, dy = e.y - svOriginY.value;
+      if (svStep.value === 1) {
+        if (Math.sqrt(dx * dx + dy * dy) < 6) { svStep.value = 0; runOnJS(jsCancel)(); }
+        else { runOnJS(jsConfirmDir)(); svStep.value = 1; }
+      } else if (svStep.value === 2) {
+        svStep.value = 0;
+        runOnJS(jsFire)(dx, dy);
+      }
+    });
 
-  // ── CUEBALL POS ───────────────────────────────────────────
-  const getCueBall = () => {
-    const b = bodiesRef.current.get(0);
-    return b ? b.position : null;
+  const getPowerColor = (p: number) => p < 0.4 ? C.green : p < 0.7 ? C.gold : C.accent;
+  const getPowerArc   = (p: number) => {
+    const r = 22, a0 = -Math.PI / 2, a1 = a0 + p * Math.PI * 2;
+    const x1 = r * Math.cos(a0), y1 = r * Math.sin(a0);
+    const x2 = r * Math.cos(a1), y2 = r * Math.sin(a1);
+    const big = p * Math.PI * 2 > Math.PI ? 1 : 0;
+    return p >= 0.999
+      ? `M ${x1} ${y1} A ${r} ${r} 0 1 1 ${x1 + 0.001} ${y1}`
+      : `M ${x1} ${y1} A ${r} ${r} 0 ${big} 1 ${x2} ${y2}`;
   };
 
-  // ── RENDER ────────────────────────────────────────────────
-  const cp     = getCueBall();
-  const hasAim = aimStart && aimEnd && cp;
+  const { step, dir, power, cuePos, lineEnd } = shootUI;
+  const showAim = (step === 1 || step === 2) && !!dir && !!cuePos;
 
-  let aimDx = 0, aimDy = 0, aimDist = 0;
-  if (hasAim) {
-    aimDx   = aimStart!.x - aimEnd!.x;
-    aimDy   = aimStart!.y - aimEnd!.y;
-    aimDist = Math.sqrt(aimDx*aimDx + aimDy*aimDy);
-    if (aimDist > 0) { aimDx /= aimDist; aimDy /= aimDist; }
-  }
-
-  const roundOver = phase === 'roundOver';
-
+  // ─── RENDER ────────────────────────────────────────────────
   return (
     <GestureHandlerRootView style={styles.container}>
-
-      {/* ── HUD ── */}
-      <View style={styles.hud}>
-        <View style={styles.hudBlock}>
-          <Text style={styles.hudLabel}>RONDA</Text>
-          <Text style={[styles.hudVal, { color: C.accent }]}>{gameState.round}</Text>
-        </View>
-
-        <View style={styles.hudSep} />
-
-        <View style={styles.hudBlock}>
-          <Text style={styles.hudLabel}>PUNTOS</Text>
-          <Text style={[styles.hudVal, { color: C.gold }]}>{gameState.score}</Text>
-          <Text style={styles.hudSub}>META {gameState.threshold}</Text>
-        </View>
-
-        {/* Barra de progreso hacia la meta */}
-        <View style={styles.progressBar}>
-          <View style={[
-            styles.progressFill,
-            { width: `${Math.min(100, (gameState.score / gameState.threshold) * 100)}%` }
-          ]} />
-        </View>
-
-        <View style={styles.hudSep} />
-
-        <View style={styles.hudBlock}>
-          <Text style={styles.hudLabel}>TIROS</Text>
-          <View style={styles.shotsRow}>
-            {Array.from({ length: gameState.maxShots }).map((_, i) => (
-              <View key={i} style={[
-                styles.shotDot,
-                { backgroundColor: i < gameState.shots ? C.green : '#2a2a2a' }
-              ]} />
-            ))}
+      <SafeAreaView style={{ flex: 1 }}>
+        {/* HUD */}
+        <View style={styles.hud}>
+          <View style={styles.hudBlock}><Text style={styles.hudLabel}>RONDA</Text><Text style={[styles.hudVal, { color: C.accent }]}>{displayState.round}/10</Text></View>
+          <View style={styles.hudSep} />
+          <View style={styles.hudBlock}>
+            <Text style={styles.hudLabel}>PUNTOS</Text>
+            <Text style={[styles.hudVal, { color: C.gold }]}>{displayState.score}</Text>
+            <Text style={styles.hudSub}>META {displayState.threshold}</Text>
           </View>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${Math.min(100, (displayState.score / displayState.threshold) * 100)}%` }]} />
+          </View>
+          <View style={styles.hudSep} />
+          <View style={styles.hudBlock}>
+            <Text style={styles.hudLabel}>TIROS</Text>
+            <View style={styles.shotsRow}>
+              {Array.from({ length: displayState.maxShots }).map((_, i) => (
+                <View key={i} style={[styles.shotDot, { backgroundColor: i < displayState.shots ? C.green : '#2a2a2a' }]} />
+              ))}
+            </View>
+          </View>
+          <View style={styles.hudSep} />
+          <View style={styles.hudBlock}><Text style={styles.hudLabel}>MONEDAS</Text><Text style={[styles.hudVal, { color: C.gold }]}>🪙 {displayState.coins}</Text></View>
+          <View style={styles.hudSep} />
+          <View style={styles.hudBlock}><Text style={styles.hudLabel}>COMBO</Text><Text style={[styles.hudVal, { color: C.green }]}>{displayState.chainCount > 0 ? `${displayState.chainCount}×` : '—'}</Text></View>
+          {onSalir && <TouchableOpacity onPress={onSalir} style={styles.exitBtn}><Text style={styles.exitText}>✕</Text></TouchableOpacity>}
         </View>
 
-        <View style={styles.hudSep} />
-
-        <View style={styles.hudBlock}>
-          <Text style={styles.hudLabel}>MONEDAS</Text>
-          <Text style={[styles.hudVal, { color: C.gold }]}>
-            🪙 {gameState.coins}
-          </Text>
+        {/* Instrucciones */}
+        <View style={styles.instruction}>
+          {gamePhase === 'aiming' && step === 0 && <Text style={styles.instrText}>🎱 ARRASTRA PARA APUNTAR</Text>}
+          {step === 1 && !dir && <Text style={[styles.instrText, { color: C.primary }]}>🎯 ARRASTRA HACIA EL OBJETIVO</Text>}
+          {step === 1 && !!dir && <Text style={[styles.instrText, { color: C.green }]}>✅ LEVANTA PARA CONFIRMAR</Text>}
+          {step === 2 && power < 0.05 && <Text style={[styles.instrText, { color: C.gold }]}>💪 ARRASTRA HACIA ATRÁS PARA CARGAR</Text>}
+          {step === 2 && power >= 0.05 && <Text style={[styles.instrText, { color: getPowerColor(power) }]}>🔥 {Math.round(power * 100)}% · LEVANTA PARA DISPARAR</Text>}
+          {gamePhase === 'shooting' && <Text style={[styles.instrText, { color: '#444' }]}>· · ·</Text>}
         </View>
 
-        {onSalir && (
-          <TouchableOpacity onPress={onSalir} style={styles.exitBtn}>
-            <Text style={styles.exitText}>✕</Text>
+        <GestureDetector gesture={gesture}>
+          <View style={styles.canvas}>
+            <Canvas style={StyleSheet.absoluteFill}>
+              {/* DEBUG: Bordes de visualización (ACTIVADOS) */}
+              {showDebugBounds && (
+                <>
+                  <Rect x={0} y={0} width={W} height={H} color="rgba(255,0,0,0.2)" strokeWidth={3} />
+                  <Rect x={TABLE_X} y={TABLE_Y} width={TABLE_W} height={TABLE_H} color="rgba(0,255,0,0.2)" strokeWidth={3} />
+                  <Rect x={PLAY_X} y={PLAY_Y} width={PLAY_W} height={PLAY_H} color="rgba(0,0,255,0.2)" strokeWidth={3} />
+                </>
+              )}
+
+              {/* Mesa */}
+              <RoundedRect x={TABLE_X - 8} y={TABLE_Y - 8} width={TABLE_W + 16} height={TABLE_H + 16} r={8} color={C.tableBorder} />
+              <RoundedRect x={TABLE_X} y={TABLE_Y} width={TABLE_W} height={TABLE_H} r={4} color={C.tableFelt} />
+              <RoundedRect x={TABLE_X} y={TABLE_Y} width={TABLE_W} height={CUSHION} r={3} color={C.cushion} />
+              <RoundedRect x={TABLE_X} y={TABLE_Y + TABLE_H - CUSHION} width={TABLE_W} height={CUSHION} r={3} color={C.cushion} />
+              <RoundedRect x={TABLE_X} y={TABLE_Y} width={CUSHION} height={TABLE_H} r={3} color={C.cushion} />
+              <RoundedRect x={TABLE_X + TABLE_W - CUSHION} y={TABLE_Y} width={CUSHION} height={TABLE_H} r={3} color={C.cushion} />
+              <Line p1={vec(PLAY_X + PLAY_W * 0.33, PLAY_Y)} p2={vec(PLAY_X + PLAY_W * 0.33, PLAY_Y + PLAY_H)} color="rgba(255,255,255,0.07)" strokeWidth={1} />
+              <Circle cx={PLAY_X + PLAY_W * 0.33} cy={PLAY_Y + PLAY_H / 2} r={4} color="rgba(255,255,255,0.15)" />
+
+              {POCKETS.map((p, i) => (
+                <React.Fragment key={i}>
+                  <Circle cx={p.x} cy={p.y} r={POCKET_R + 6} color="rgba(0,255,136,0.06)" />
+                  <Circle cx={p.x} cy={p.y} r={POCKET_R + 4} color="#050505" />
+                  <Circle cx={p.x} cy={p.y} r={POCKET_R} color="#0d0d0d" />
+                </React.Fragment>
+              ))}
+
+              {pocketFlashes.map(f => <Circle key={f.id} cx={f.x} cy={f.y} r={f.r} color={`rgba(255,190,11,${f.opacity.toFixed(2)})`} />)}
+              {particles.map(p => <Circle key={p.id} cx={p.x} cy={p.y} r={3} color={p.color} opacity={p.life} />)}
+
+              {/* Línea de mira */}
+              {showAim && lineEnd && (
+                <>
+                  <Line
+                    p1={vec(cuePos!.x, cuePos!.y)} p2={vec(lineEnd.x, lineEnd.y)}
+                    color={step === 2 ? `rgba(255,190,11,${(0.4 + power * 0.55).toFixed(2)})` : 'rgba(255,255,255,0.65)'}
+                    strokeWidth={step === 2 ? 2 + power * 2 : 2}
+                  />
+                  <Circle cx={lineEnd.x} cy={lineEnd.y} r={step === 2 ? 6 + power * 5 : 6}
+                    color={step === 2 ? getPowerColor(power) : 'rgba(255,255,255,0.45)'} />
+                  <Circle cx={cuePos!.x} cy={cuePos!.y} r={BALL_R + 3} color="rgba(255,255,255,0.1)" />
+                </>
+              )}
+
+              {/* Taco */}
+              {showAim && dir && cuePos && (() => {
+                const bx  = -dir.x, by = -dir.y;
+                const off = BALL_R + 6 + (step === 2 ? power * 28 : 0);
+                const x1  = cuePos.x + bx * off,        y1 = cuePos.y + by * off;
+                const x2  = cuePos.x + bx * (off + CUE_LEN), y2 = cuePos.y + by * (off + CUE_LEN);
+                const px  = -by, py = bx;
+                const p   = Skia.Path.Make();
+                p.moveTo(x1 + px * CUE_W * 0.4,  y1 + py * CUE_W * 0.4);
+                p.lineTo(x1 - px * CUE_W * 0.4,  y1 - py * CUE_W * 0.4);
+                p.lineTo(x2 - px * CUE_W * 1.6,  y2 - py * CUE_W * 1.6);
+                p.lineTo(x2 + px * CUE_W * 1.6,  y2 + py * CUE_W * 1.6);
+                p.close();
+                const cc = step === 2 ? (power > 0.7 ? '#d97706' : power > 0.4 ? '#a16207' : '#8B5E3C') : '#8B5E3C';
+                return <Path path={p} color={cc} />;
+              })()}
+
+              {/* Medidor potencia */}
+              {step === 2 && cuePos && (
+                <Group transform={[{ translateX: cuePos.x }, { translateY: cuePos.y - 50 }]}>
+                  <Circle cx={0} cy={0} r={28} color="rgba(0,0,0,0.8)" />
+                  <Path path={`M 0 -22 A 22 22 0 1 1 -0.001 -22`} color="rgba(255,255,255,0.1)" style="stroke" strokeWidth={6} />
+                  {power > 0.01 && <Path path={getPowerArc(power)} color={getPowerColor(power)} style="stroke" strokeWidth={6} />}
+                  {skFont && <SkText x={-13} y={6} text={`${Math.round(power * 100)}%`} font={skFont} color="white" />}
+                </Group>
+              )}
+
+              {/* Bolas */}
+              {balls.map(ball => {
+                const color    = BALL_COLORS[ball.id] ?? '#fff';
+                const isStripe = ball.id >= 9 && ball.id <= 15;
+                const label    = ball.id === 0 ? '' : String(ball.id);
+                const tx       = ball.x - (label.length > 1 ? BALL_R * 0.38 : BALL_R * 0.22);
+                const ty       = ball.y + BALL_R * 0.3;
+                return (
+                  <React.Fragment key={ball.id}>
+                    <Circle cx={ball.x + 2} cy={ball.y + 3} r={BALL_R + 1} color="rgba(0,0,0,0.4)" />
+                    {ball.id === 8 && (
+                      <>
+                        <Circle cx={ball.x} cy={ball.y} r={BALL_R + 6} color="rgba(255,190,11,0.08)" />
+                        <Circle cx={ball.x} cy={ball.y} r={BALL_R + 3} color="rgba(255,190,11,0.18)" />
+                      </>
+                    )}
+                    <Circle cx={ball.x} cy={ball.y} r={BALL_R} color={color} />
+                    {isStripe && (
+                      <>
+                        <Circle cx={ball.x} cy={ball.y} r={BALL_R} color="rgba(255,255,255,0.88)" />
+                        <Circle cx={ball.x} cy={ball.y} r={BALL_R * 0.58} color={color} />
+                      </>
+                    )}
+                    {ball.id !== 0 && (
+                      <>
+                        <Circle cx={ball.x} cy={ball.y} r={BALL_R * 0.42} color="rgba(255,255,255,0.92)" />
+                        {skFont && <SkText x={tx} y={ty} text={label} font={skFont} color="#111" />}
+                      </>
+                    )}
+                    <Circle cx={ball.x - BALL_R * 0.28} cy={ball.y - BALL_R * 0.28} r={BALL_R * 0.22} color="rgba(255,255,255,0.55)" />
+                  </React.Fragment>
+                );
+              })}
+              {floatingTexts.map(t => skFont && <SkText key={t.id} x={t.x} y={t.y} text={t.text} font={skFont} color={t.color} />)}
+            </Canvas>
+          </View>
+        </GestureDetector>
+
+        {/* Debug panel */}
+        {debugMode && (
+          <View style={styles.debugPanel}>
+            <Text style={styles.debugTitle}>🐞 DEBUG</Text>
+            <Text style={styles.debugInfo}>W: {W} H: {H}</Text>
+            <Text style={styles.debugInfo}>Mesa: {TABLE_W}x{TABLE_H}</Text>
+            <TouchableOpacity style={styles.debugBtn} onPress={() => setShowDebugBounds(!showDebugBounds)}>
+              <Text style={styles.debugBtnText}>{showDebugBounds ? 'Ocultar Bordes' : 'Mostrar Bordes'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.debugClose} onPress={() => setDebugMode(false)}>
+              <Text style={styles.debugCloseText}>CERRAR</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {!debugMode && (
+          <TouchableOpacity onPress={() => setDebugMode(true)} style={styles.debugToggle}>
+            <Text style={styles.debugToggleText}>🐞</Text>
           </TouchableOpacity>
         )}
-      </View>
 
-      {/* ── MESA ── */}
-      <GestureDetector gesture={gesture}>
-        <View style={styles.canvas}>
-          <Canvas style={StyleSheet.absoluteFill}>
+        {/* OVERLAY FIN DE RONDA */}
+        {gamePhase === 'roundOver' && (() => {
+          const won    = displayState.score >= displayState.threshold;
+          const reward = won ? 50 + shotDataRef.current.shotsLeft * 10 : 0;
+          return (
+            <View style={styles.overlay}>
+              <Text style={styles.overlayTitle}>{won ? '¡RONDA SUPERADA!' : 'SIN TIROS'}</Text>
+              <Text style={styles.overlayScore}>{displayState.score} / {displayState.threshold} pts</Text>
+              {won && <Text style={styles.overlayBonus}>🪙 +{reward} monedas de bonus</Text>}
+              {won ? (
+                <TouchableOpacity style={styles.overlayBtn} onPress={() => {
+                  const finalCoins = shotDataRef.current.coins + reward;
+                  shotDataRef.current.coins = finalCoins;
+                  if (onRoundWin) onRoundWin(displayState.score, finalCoins, displayState.round);
+                }}>
+                  <Text style={styles.overlayBtnText}>CONTINUAR 🏪</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.overlayBtn, { borderColor: C.primary }]}
+                  onPress={() => { initRound(displayState.round, displayState.coins, 0); startLoop(); }}
+                >
+                  <Text style={[styles.overlayBtnText, { color: C.primary }]}>REINTENTAR</Text>
+                </TouchableOpacity>
+              )}
+              {onSalir && (
+                <TouchableOpacity style={[styles.overlayBtn, { borderColor: '#333', marginTop: 10 }]} onPress={onSalir}>
+                  <Text style={[styles.overlayBtnText, { color: '#555' }]}>MENÚ PRINCIPAL</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })()}
 
-            {/* Madera exterior */}
-            <RoundedRect
-              x={TABLE_X-8} y={TABLE_Y-8}
-              width={TABLE_W+16} height={TABLE_H+16}
-              r={8} color={C.tableBorder}
-            />
-            {/* Fieltro */}
-            <RoundedRect
-              x={TABLE_X} y={TABLE_Y}
-              width={TABLE_W} height={TABLE_H}
-              r={4} color={C.tableFelt}
-            />
-            {/* Bandas */}
-            <RoundedRect x={TABLE_X} y={TABLE_Y} width={TABLE_W} height={CUSHION} r={3} color={C.cushion} />
-            <RoundedRect x={TABLE_X} y={TABLE_Y+TABLE_H-CUSHION} width={TABLE_W} height={CUSHION} r={3} color={C.cushion} />
-            <RoundedRect x={TABLE_X} y={TABLE_Y} width={CUSHION} height={TABLE_H} r={3} color={C.cushion} />
-            <RoundedRect x={TABLE_X+TABLE_W-CUSHION} y={TABLE_Y} width={CUSHION} height={TABLE_H} r={3} color={C.cushion} />
-
-            {/* Línea de saque */}
-            <Line
-              p1={vec(PLAY_X + PLAY_W*0.33, PLAY_Y)}
-              p2={vec(PLAY_X + PLAY_W*0.33, PLAY_Y+PLAY_H)}
-              color="rgba(255,255,255,0.07)" strokeWidth={1}
-            />
-            <Circle
-              cx={PLAY_X+PLAY_W*0.33} cy={PLAY_Y+PLAY_H/2}
-              r={4} color="rgba(255,255,255,0.15)"
-            />
-
-            {/* Troneras — con borde neón */}
-            {POCKETS.map((p, i) => (
-              <React.Fragment key={i}>
-                <Circle cx={p.x} cy={p.y} r={POCKET_R+6} color="rgba(0,255,136,0.08)" />
-                <Circle cx={p.x} cy={p.y} r={POCKET_R+4} color="#050505" />
-                <Circle cx={p.x} cy={p.y} r={POCKET_R}   color="#0d0d0d" />
-              </React.Fragment>
-            ))}
-
-            {/* Flashes de tronera - ✅ CORREGIDO: sin paréntesis extra */}
-            {pocketFlashes.map(f => (
-              <Circle
-                key={f.id} cx={f.x} cy={f.y} r={f.r}
-                color={`${f.color}${f.opacity.toFixed(2)}`}
-              />
-            ))}
-
-            {/* Línea de guía — más segmentos, degradado más suave */}
-            {hasAim && aimDist > 8 && Array.from({ length: 16 }).map((_, i) => {
-              const t1    = BALL_R + (i/16) * PLAY_W * 0.55;
-              const t2    = BALL_R + ((i+0.4)/16) * PLAY_W * 0.55;
-              const alpha = Math.max(0, 0.75 - i * 0.048);
-              return (
-                <Line key={i}
-                  p1={vec(cp!.x + aimDx*t1, cp!.y + aimDy*t1)}
-                  p2={vec(cp!.x + aimDx*t2, cp!.y + aimDy*t2)}
-                  color={`rgba(255,190,11,${alpha.toFixed(2)})`}
-                  strokeWidth={2}
-                />
-              );
-            })}
-
-            {/* Taco */}
-            {hasAim && aimDist > 8 && cp && (() => {
-              const gap   = BALL_R + 6 + Math.min(aimDist * 0.15, 20);
-              const x1    = cp.x - aimDx * gap;
-              const y1    = cp.y - aimDy * gap;
-              const x2    = cp.x - aimDx * (gap + CUE_LEN);
-              const y2    = cp.y - aimDy * (gap + CUE_LEN);
-              const perpX = -aimDy;
-              const perpY =  aimDx;
-              const tipW  = CUE_W * 0.4;
-              const buttW = CUE_W * 1.6;
-              const path  = Skia.Path.Make();
-              path.moveTo(x1 + perpX*tipW,  y1 + perpY*tipW);
-              path.lineTo(x1 - perpX*tipW,  y1 - perpY*tipW);
-              path.lineTo(x2 - perpX*buttW, y2 - perpY*buttW);
-              path.lineTo(x2 + perpX*buttW, y2 + perpY*buttW);
-              path.close();
-              return (
-                <Group>
-                  <Path path={path} color="#8B5E3C" />
-                  <Circle cx={x1} cy={y1} r={tipW} color="#c8a97a" />
-                </Group>
-              );
-            })()}
-
-            {/* Bolas */}
-            {balls.map(ball => {
-              const color    = BALL_COLORS[ball.id] ?? '#fff';
-              const isStripe = ball.id >= 9 && ball.id <= 15;
-              const is8ball  = ball.id === 8;
-              const label    = ball.id === 0 ? '' : String(ball.id);
-              const fontSize = BALL_R * 0.85;
-              const textX    = ball.x - (label.length > 1 ? fontSize*0.6 : fontSize*0.3);
-              const textY    = ball.y + fontSize * 0.35;
-
-              return (
-                <React.Fragment key={ball.id}>
-                  {/* Sombra */}
-                  <Circle cx={ball.x+2} cy={ball.y+3} r={BALL_R+1} color="rgba(0,0,0,0.4)" />
-
-                  {/* Halo dorado bola 8 */}
-                  {is8ball && (
-                    <Circle cx={ball.x} cy={ball.y} r={BALL_R+3} color="rgba(255,190,11,0.18)" />
-                  )}
-
-                  {/* Cuerpo */}
-                  <Circle cx={ball.x} cy={ball.y} r={BALL_R} color={color} />
-
-                  {/* Banda rayada */}
-                  {isStripe && (
-                    <>
-                      <Circle cx={ball.x} cy={ball.y} r={BALL_R}      color="rgba(255,255,255,0.88)" />
-                      <Circle cx={ball.x} cy={ball.y} r={BALL_R*0.58} color={color} />
-                    </>
-                  )}
-
-                  {/* Círculo del número */}
-                  {ball.id !== 0 && (
-                    <>
-                      <Circle cx={ball.x} cy={ball.y} r={BALL_R*0.42} color="rgba(255,255,255,0.92)" />
-                      {skFont && (
-                        <SkText x={textX} y={textY} text={label} font={skFont} color="#111" />
-                      )}
-                    </>
-                  )}
-
-                  {/* Brillo */}
-                  <Circle
-                    cx={ball.x - BALL_R*0.28} cy={ball.y - BALL_R*0.28}
-                    r={BALL_R*0.22} color="rgba(255,255,255,0.55)"
-                  />
-                </React.Fragment>
-              );
-            })}
-
-            {/* Textos flotantes */}
-            {floatingTexts.map(t => skFont && (
-              <SkText
-                key={t.id} x={t.x - 20} y={t.y} text={t.text} font={skFont}
-                color={`rgba(255,190,11,${Math.min(t.opacity, 1).toFixed(2)})`}
-              />
-            ))}
-
-          </Canvas>
-        </View>
-      </GestureDetector>
-
-      {/* ── OVERLAY FIN DE RONDA ── */}
-      {roundOver && (
-        <View style={styles.overlay}>
-          <Text style={styles.overlayTitle}>
-            {gameState.score >= gameState.threshold ? '¡RONDA SUPERADA!' : 'SIN TIROS'}
-          </Text>
-          <Text style={styles.overlayScore}>
-            {gameState.score} / {gameState.threshold} pts
-          </Text>
-          {gameState.score >= gameState.threshold ? (
-            <TouchableOpacity
-              style={styles.overlayBtn}
-              onPress={() => {
-                const coinsBonus = gameState.shots * 15;
-                initRound(gameState.round + 1, gameState.coins + coinsBonus, gameState.score);
-                startLoop();
-              }}
-            >
-              <Text style={styles.overlayBtnText}>SIGUIENTE RONDA →</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.overlayBtn, { borderColor: C.primary }]}
-              onPress={() => {
-                initRound(gameState.round, gameState.coins, gameState.score);
-                startLoop();
-              }}
-            >
-              <Text style={[styles.overlayBtnText, { color: C.primary }]}>REINTENTAR</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
+        {/* Game Win */}
+        {gamePhase === 'gameWin' && (
+          <View style={styles.overlay}>
+            <Text style={[styles.overlayTitle, { color: C.gold }]}>¡VICTORIA!</Text>
+            <Text style={styles.overlayScore}>Completaste las 10 rondas 🎱</Text>
+            <Text style={styles.overlayScore}>Puntuación final: {displayState.score}</Text>
+            <Text style={styles.overlayScore}>Monedas: 🪙 {displayState.coins}</Text>
+            {onSalir && <TouchableOpacity style={styles.overlayBtn} onPress={onSalir}><Text style={styles.overlayBtnText}>SALIR</Text></TouchableOpacity>}
+          </View>
+        )}
+      </SafeAreaView>
     </GestureHandlerRootView>
   );
 }
 
 // ─── ESTILOS ─────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
-  canvas:    { flex: 1 },
-
-  hud: {
-    position: 'absolute', top: 0, left: 0, right: 0, height: MARGIN_V,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
-    paddingHorizontal: 12, backgroundColor: 'rgba(6,9,16,0.96)',
-    borderBottomWidth: 1, borderBottomColor: C.primary + '33', zIndex: 10,
-  },
-  hudBlock:  { alignItems: 'center' },
-  hudSep:    { width: 1, height: '40%', backgroundColor: 'rgba(255,255,255,0.07)' },
-  hudLabel:  { color: '#555', fontSize: 8, letterSpacing: 2, textTransform: 'uppercase' },
-  hudVal:    { fontSize: 18, fontWeight: 'bold', letterSpacing: 1 },
-  hudSub:    { color: '#444', fontSize: 8, letterSpacing: 1 },
-  shotsRow:  { flexDirection: 'row', gap: 3, marginTop: 3 },
-  shotDot:   { width: 9, height: 9, borderRadius: 1 },
-  exitBtn:   { padding: 8 },
-  exitText:  { color: '#555', fontSize: 16 },
-
-  progressBar: {
-    width: 60, height: 4, backgroundColor: '#1a1a2e',
-    borderRadius: 2, overflow: 'hidden', marginTop: 4,
-  },
-  progressFill: {
-    height: '100%', backgroundColor: C.green,
-    borderRadius: 2,
-  },
-
-  overlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(6,9,16,0.92)',
-    alignItems: 'center', justifyContent: 'center', zIndex: 20,
-  },
-  overlayTitle: {
-    color: C.accent, fontSize: 24, fontWeight: 'bold',
-    letterSpacing: 4, textTransform: 'uppercase', marginBottom: 8,
-  },
-  overlayScore: {
-    color: C.gold, fontSize: 16, letterSpacing: 2, marginBottom: 28,
-  },
-  overlayBtn: {
-    borderWidth: 2, borderColor: C.accent,
-    paddingHorizontal: 28, paddingVertical: 12,
-  },
-  overlayBtnText: {
-    color: C.accent, fontSize: 14, letterSpacing: 3,
-    textTransform: 'uppercase', fontWeight: 'bold',
-  },
+  container:      { flex: 1, backgroundColor: C.bg },
+  canvas:         { flex: 1 },
+  hud:            { position: 'absolute', top: 0, left: 0, right: 0, height: MARGIN_V, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 8, backgroundColor: 'rgba(6,9,16,0.96)', borderBottomWidth: 1, borderBottomColor: C.primary + '33', zIndex: 10 },
+  hudBlock:       { alignItems: 'center', marginHorizontal: 4 },
+  hudSep:         { width: 1, height: '40%', backgroundColor: 'rgba(255,255,255,0.07)' },
+  hudLabel:       { color: '#555', fontSize: 8, letterSpacing: 2, textTransform: 'uppercase' },
+  hudVal:         { fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
+  hudSub:         { color: '#444', fontSize: 8, letterSpacing: 1 },
+  shotsRow:       { flexDirection: 'row', gap: 3, marginTop: 3 },
+  shotDot:        { width: 8, height: 8, borderRadius: 1 },
+  exitBtn:        { padding: 8 },
+  exitText:       { color: '#555', fontSize: 16 },
+  progressBar:    { width: 50, height: 4, backgroundColor: '#1a1a2e', borderRadius: 2, overflow: 'hidden', marginHorizontal: 4 },
+  progressFill:   { height: '100%', backgroundColor: C.green, borderRadius: 2 },
+  instruction:    { position: 'absolute', bottom: H * 0.04, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 20, paddingVertical: 7, borderRadius: 20, zIndex: 15 },
+  instrText:      { color: C.gold, fontSize: 12, letterSpacing: 2 },
+  overlay:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(6,9,16,0.95)', alignItems: 'center', justifyContent: 'center', zIndex: 20 },
+  overlayTitle:   { color: C.accent, fontSize: 24, fontWeight: 'bold', letterSpacing: 4, textTransform: 'uppercase', marginBottom: 8 },
+  overlayScore:   { color: C.gold, fontSize: 16, letterSpacing: 2, marginBottom: 12 },
+  overlayBonus:   { color: C.green, fontSize: 13, letterSpacing: 1, marginBottom: 20 },
+  overlayBtn:     { borderWidth: 2, borderColor: C.accent, paddingHorizontal: 28, paddingVertical: 12, marginTop: 8 },
+  overlayBtnText: { color: C.accent, fontSize: 14, letterSpacing: 3, textTransform: 'uppercase', fontWeight: 'bold' },
+  debugToggle:    { position: 'absolute', bottom: H * 0.1, right: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: C.accent, justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+  debugToggleText:{ fontSize: 22, color: C.gold },
+  debugPanel:     { position: 'absolute', bottom: H * 0.15, left: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.95)', borderRadius: 12, padding: 12, zIndex: 100, borderWidth: 1, borderColor: C.accent },
+  debugTitle:     { color: C.accent, fontSize: 12, fontWeight: 'bold', textAlign: 'center', marginBottom: 10, letterSpacing: 2 },
+  debugInfo:      { color: '#888', fontSize: 10, fontFamily: 'monospace', textAlign: 'center', marginBottom: 4 },
+  debugBtn:       { backgroundColor: C.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, alignItems: 'center', marginBottom: 4 },
+  debugBtnText:   { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  debugClose:     { backgroundColor: '#333', paddingVertical: 8, borderRadius: 6, marginTop: 8, alignItems: 'center' },
+  debugCloseText: { color: '#fff', fontSize: 12 },
 });
