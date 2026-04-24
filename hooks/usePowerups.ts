@@ -97,7 +97,7 @@ export const usePowerups = ({ bodiesRef, phaseRef, onAddParticles }: UsePowerups
 
   // ── PRECISIÓN: retorna la longitud de línea de mira ───────
   // GameScreen llama esto para saber qué tan larga dibujar la línea.
-  // Sin booster → 1.0 (normal). Con precisión → 2.0 (doble).
+  // Sin booster → 1.0 (normal). Con precisión → 2.0 (doble)...
   const getAimLineMult = useCallback((): number => {
     return activeBoosterRef.current === 'booster_precision' ? 2.0 : 1.0;
   }, []);
