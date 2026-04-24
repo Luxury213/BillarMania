@@ -13,6 +13,7 @@
       "statusBarStyle": "light"
     },
     "android": {
+      "package": "com.luxury213.billarmania",
       "adaptiveIcon": {
         "backgroundColor": "#060910",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -49,6 +50,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5001be93-69f7-48ab-b425-111172663f41"
+      }
     }
   }
 }
