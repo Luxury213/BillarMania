@@ -56,8 +56,8 @@ const CUES = [
     animDesc: 'Congela el aire a su paso, dejando cristales de hielo flotantes.',
   },
 ];
+// POTENCIADORES
 
-// ─── POTENCIADORES ────────────────────────────────────────────
 const ALL_BOOSTERS = [
   {
     id: 'booster_fire',
@@ -83,8 +83,15 @@ const ALL_BOOSTERS = [
     price: 90,
     description: 'Modifica la trayectoria de la bola, permitiendo tiros curvos y efectos inesperados.',
   },
+  {
+    id: 'booster_vida',
+    name: '+VIDA',
+    emoji: '❤️',
+    color: '#ff006e',
+    price: 150,
+    description: 'Adquiere un tiro extra en la siguiente ronda. Úsalo bien, cada disparo cuenta.',
+  },
 ];
-
 // Rota los potenciadores según la ronda: ronda 1→fire, 2→ice, 3→wind, 4→fire...
 function getBoostersForRound(round: number): typeof ALL_BOOSTERS {
   const offset = (round - 1) % ALL_BOOSTERS.length;
@@ -154,15 +161,15 @@ export default function ShopScreen({ coins, round, score, onClose }: ShopScreenP
     showMsg(`✅ ¡${b.name} activado para la próxima ronda!`);
   }
 
-  function handleClose() {
-  // Convertir 'booster_fire' → 'fire', 'booster_ice' → 'ice', 'booster_wind' → 'wind'
-  let boosterValue: string | null = activeBooster;
-  if (activeBooster === 'booster_fire') boosterValue = 'fire';
-  if (activeBooster === 'booster_ice') boosterValue = 'ice';
-  if (activeBooster === 'booster_wind') boosterValue = 'wind';
-  
-  onClose({ coins: currentCoins, selectedCue, activeBooster: boosterValue });
-}
+ function handleClose() {
+    let boosterValue: string | null = activeBooster;
+    if (activeBooster === 'booster_fire') boosterValue = 'fire';
+    if (activeBooster === 'booster_ice')  boosterValue = 'ice';
+    if (activeBooster === 'booster_wind') boosterValue = 'wind';
+    if (activeBooster === 'booster_vida') boosterValue = 'vida';
+
+    onClose({ coins: currentCoins, selectedCue, activeBooster: boosterValue });
+  }
 
   // ── PREVIEW DEL TACO ──────────────────────────────────────
   function CuePreview({ cue }: { cue: typeof CUES[0] }) {

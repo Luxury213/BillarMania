@@ -3,7 +3,6 @@
 // Mesa moderna con márgenes simétricos + Tienda + Potenciadores
 // Universidad Santiago de Cali — Computación Móvil 2026
 // ============================================================
-
 import {
   Canvas, Circle, Group, Line,
   matchFont, Path, RoundedRect,
@@ -549,7 +548,12 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
       });
       addParticles(cue.position.x, cue.position.y, '#88ccff', 6);
     }
-    
+    // Potenciador +VIDA: da un tiro extra esta ronda (solo una vez)
+    if (sd.activeBooster === 'vida') {
+      sd.shotsLeft += 1;        // suma 1 tiro extra
+      sd.activeBooster = null;  // se consume al usarse
+    }
+
     sd.shotsLeft -= 1;
     sd.pocketed = [];
     sd.bounces = 0;
