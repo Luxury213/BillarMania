@@ -1,7 +1,5 @@
 // ============================================================
 // GameScreen.tsx — BillarMania
-// + booster_precision (línea de mira larga)
-// + booster_extra_shot (+1 tiro por ronda)
 // ============================================================
 
 import {
@@ -19,6 +17,7 @@ import {
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { usePowerups } from '../../hooks/usePowerups';
 import ShopScreen from './ShopScreen';
 
 const C = {
@@ -56,9 +55,7 @@ const CUE_LEN  = BALL_R * 14;
 const CUE_W    = 5;
 const MAX_DRAG = 160;
 
-// ✅ Longitud de línea de mira normal vs con precisión
-const AIM_LINE_NORMAL    = PLAY_W * 0.75;
-const AIM_LINE_PRECISION = PLAY_W * 1.5; // doble
+const AIM_LINE_NORMAL = PLAY_W * 0.75;
 
 const POCKETS = [
   { x: PLAY_X,              y: PLAY_Y },
@@ -113,36 +110,55 @@ interface ShotData {
   bounces: number; chainCount: number; shotsLeft: number;
   score: number; coins: number; threshold: number; round: number; maxShots: number;
   activeBooster: string | null;
+  firstBallPocketed: boolean; // ✅ rastrea si ya se metió la primera bola de la ronda
 }
 
-function calcShot(pocketed: { ballId: number; bounces: number }[], chainCount: number) {
+// ✅ firstBallMult como parámetro con default 1
+function calcShot(
+  pocketed: { ballId: number; bounces: number }[],
+  chainCount: number,
+  firstBallMult: number = 1.0,
+) {
   if (pocketed.length === 0) return { earned: 0, coinBonus: 0, newChain: 0, label: '', color: C.gold };
-  const baseTotal = pocketed.reduce((s, p) => s + (BALL_POINTS[p.ballId] ?? 60), 0);
+
+  // ✅ Primera bola del array vale doble si el booster está activo
+  const baseTotal = pocketed.reduce((s, p, index) => {
+    const base = BALL_POINTS[p.ballId] ?? 60;
+    return s + (index === 0 ? base * firstBallMult : base);
+  }, 0);
+
   const n = pocketed.length;
   let multCantidad = 1, color = C.gold;
   if (n === 2) multCantidad = 1.8;
   else if (n >= 3) multCantidad = 2.5;
+
   const ballIds = pocketed.map(p => p.ballId).sort((a, b) => a - b);
   let isScale = true;
   for (let i = 1; i < ballIds.length; i++) if (ballIds[i] !== ballIds[i - 1] + 1) { isScale = false; break; }
   const multEscala = (isScale && ballIds.length >= 2) ? 1.5 : 1;
   if (multEscala > 1) color = C.green;
+
   const hasBounce  = pocketed.some(p => p.bounces >= 1);
   const multBounce = hasBounce ? 1.3 : 1;
   if (hasBounce && color === C.gold) color = C.primary;
-  const newChain   = pocketed.length > 0 ? chainCount + 1 : 0;
-  let multCadena   = 1;
+
+  const newChain = pocketed.length > 0 ? chainCount + 1 : 0;
+  let multCadena = 1;
   if (newChain === 2) multCadena = 1.2;
   else if (newChain >= 3) multCadena = 1.5;
   if (multCadena > 1) color = C.accent;
+
   const totalMult = multCantidad * multEscala * multBounce * multCadena;
   const earned    = Math.floor(baseTotal * totalMult);
   const coinBonus = Math.floor(earned / 60);
+
   const parts = [`+${earned}`];
+  if (firstBallMult > 1) parts.push(`1ª×${firstBallMult}`); // ✅ muestra el bonus
   if (multCantidad > 1) parts.push(`${n}B×${multCantidad}`);
   if (multEscala > 1)   parts.push(`ESC×1.5`);
   if (multBounce > 1)   parts.push(`REB×1.3`);
   if (multCadena > 1)   parts.push(`CH×${multCadena}`);
+
   return { earned, coinBonus, newChain, label: parts.join(' '), color };
 }
 
@@ -164,37 +180,12 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     shotsLeft: 5, score: 0, coins: 0,
     threshold: 300, round: 1, maxShots: 5,
     activeBooster: null,
+    firstBallPocketed: false,
   });
-
-  // ✅ Para pasar a ShopScreen el booster anterior
   const lastBoosterRef = useRef<string | null>(null);
 
-  const svStep    = useSharedValue<0 | 1 | 2>(0);
-  const svOriginX = useSharedValue(0);
-  const svOriginY = useSharedValue(0);
-  const aimDirRef = useRef<{ x: number; y: number } | null>(null);
-  const cuePosRef = useRef<{ x: number; y: number } | null>(null);
-
-  const [balls, setBalls]               = useState<BallState[]>([]);
-  const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
-  const [pocketFlashes, setPocketFlashes] = useState<PocketFlash[]>([]);
-  const [particles, setParticles]       = useState<Particle[]>([]);
-  const [gamePhase, setGamePhase]       = useState<'aiming' | 'shooting' | 'roundOver' | 'gameWin'>('aiming');
-  const [showShop, setShowShop]         = useState(false);
-  const [displayState, setDisplayState] = useState({
-    score: 0, round: 1, shots: 5, maxShots: 5,
-    threshold: 300, coins: 0, chainCount: 0,
-    activeBooster: null as string | null,
-  });
-  const [shootUI, setShootUI] = useState<{
-    step: 0 | 1 | 2; dir: { x: number; y: number } | null;
-    power: number; cuePos: { x: number; y: number } | null;
-    lineEnd: { x: number; y: number } | null;
-  }>({ step: 0, dir: null, power: 0, cuePos: null, lineEnd: null });
-
-  const [debugMode, setDebugMode] = useState(false);
-
-  const addParticles = (x: number, y: number, color: string, count = 12) => {
+  // ✅ addParticles ANTES del hook
+  const addParticles = useCallback((x: number, y: number, color: string, count = 12) => {
     const arr: Particle[] = [];
     for (let i = 0; i < count; i++) {
       arr.push({
@@ -207,7 +198,46 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
       });
     }
     setParticles(prev => [...prev, ...arr]);
-  };
+  }, []);
+
+  // ✅ Hook con todos los potenciadores
+  const {
+    applyFireEffect,
+    applyIceEffect,
+    restoreIceEffect,
+    applyWindEffect,
+    applyPrecisionEffect,
+    getAimLineMult,
+    getExtraShots,
+    getInitialChain,
+    getFirstBallMult,
+    getBoosterInfo,
+  } = usePowerups({ bodiesRef, phaseRef, onAddParticles: addParticles });
+
+  const svStep    = useSharedValue<0 | 1 | 2>(0);
+  const svOriginX = useSharedValue(0);
+  const svOriginY = useSharedValue(0);
+  const aimDirRef = useRef<{ x: number; y: number } | null>(null);
+  const cuePosRef = useRef<{ x: number; y: number } | null>(null);
+
+  const [balls, setBalls]                 = useState<BallState[]>([]);
+  const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
+  const [pocketFlashes, setPocketFlashes] = useState<PocketFlash[]>([]);
+  const [particles, setParticles]         = useState<Particle[]>([]);
+  const [gamePhase, setGamePhase]         = useState<'aiming' | 'shooting' | 'roundOver' | 'gameWin'>('aiming');
+  const [showShop, setShowShop]           = useState(false);
+  const [displayState, setDisplayState]   = useState({
+    score: 0, round: 1, shots: 5, maxShots: 5,
+    threshold: 300, coins: 0, chainCount: 0,
+    activeBooster: null as string | null,
+  });
+  const [shootUI, setShootUI] = useState<{
+    step: 0 | 1 | 2; dir: { x: number; y: number } | null;
+    power: number; cuePos: { x: number; y: number } | null;
+    lineEnd: { x: number; y: number } | null;
+  }>({ step: 0, dir: null, power: 0, cuePos: null, lineEnd: null });
+
+  const [debugMode, setDebugMode] = useState(false);
 
   const resetShootUI = () => {
     aimDirRef.current = null;
@@ -216,6 +246,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     setShootUI({ step: 0, dir: null, power: 0, cuePos: null, lineEnd: null });
   };
 
+  // ── Loop ───────────────────────────────────────────────────
   const startLoop = useCallback(() => {
     cancelAnimationFrame(frameRef.current);
     const loop = () => {
@@ -223,17 +254,8 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
       bodiesRef.current.forEach((b, id) => nb.push({ id, x: b.position.x, y: b.position.y }));
       setBalls([...nb]);
 
-      // Efecto VIENTO
-      if (shotDataRef.current.activeBooster === 'wind' && phaseRef.current === 'shooting') {
-        const cueBody = bodiesRef.current.get(0);
-        if (cueBody) {
-          const speed = Math.sqrt(cueBody.velocity.x ** 2 + cueBody.velocity.y ** 2);
-          if (speed > 0.3) {
-            Matter.Body.applyForce(cueBody, cueBody.position, { x: 0.0008, y: 0 });
-            if (Math.random() < 0.2) addParticles(cueBody.position.x, cueBody.position.y, '#aaffdd', 2);
-          }
-        }
-      }
+      // ✅ Viento via hook
+      applyWindEffect();
 
       setParticles(p => p.map(pt => ({ ...pt, x: pt.x + pt.vx, y: pt.y + pt.vy, life: pt.life - 0.025 })).filter(pt => pt.life > 0));
       setFloatingTexts(p => p.map(t => ({ ...t, y: t.y + t.vy, opacity: t.opacity - 0.018 })).filter(t => t.opacity > 0));
@@ -248,15 +270,26 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
       frameRef.current = requestAnimationFrame(loop);
     };
     frameRef.current = requestAnimationFrame(loop);
-  }, []);
+  }, [applyWindEffect]);
 
+  // ── Resolver tiro ──────────────────────────────────────────
   const resolveShot = () => {
     if (resolvingRef.current) return;
     resolvingRef.current = true;
     const sd = shotDataRef.current;
-    const { earned, coinBonus, newChain, label, color } = calcShot(sd.pocketed, sd.chainCount);
+
+    // ✅ primera bola: solo aplica el mult si es la primera bola de la ronda
+    const firstBallMult = (!sd.firstBallPocketed && sd.pocketed.length > 0)
+      ? getFirstBallMult()
+      : 1.0;
+
+    const { earned, coinBonus, newChain, label, color } = calcShot(
+      sd.pocketed, sd.chainCount, firstBallMult,
+    );
 
     if (earned > 0 && sd.pocketed.length > 0) {
+      // ✅ marcar que ya se metió la primera bola de la ronda
+      sd.firstBallPocketed = true;
       const fp = sd.pocketed[0];
       setFloatingTexts(ft => [...ft, {
         id: floatIdRef.current++, text: label,
@@ -267,13 +300,11 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     }
 
     sd.chainCount = newChain;
-    sd.score += earned;
-    sd.coins += coinBonus;
+    sd.score  += earned;
+    sd.coins  += coinBonus;
 
-    // Restaurar fricción si era HIELO
-    if (sd.activeBooster === 'ice') {
-      bodiesRef.current.forEach(body => Matter.Body.set(body, { frictionAir: 0.018 }));
-    }
+    // ✅ Hielo via hook — restaura fricción
+    restoreIceEffect();
 
     sd.pocketed = [];
     sd.bounces  = 0;
@@ -292,6 +323,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     resolvingRef.current = false;
   };
 
+  // ── Troneras ───────────────────────────────────────────────
   const handlePockets = useCallback((bodyA: Matter.Body, bodyB: Matter.Body) => {
     [bodyA, bodyB].forEach(body => {
       if (!body.label.startsWith('ball_')) return;
@@ -313,12 +345,11 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
         addParticles(p.x, p.y, C.gold, 8);
       });
     });
-  }, []);
+  }, [addParticles]);
 
+  // ── Iniciar ronda ──────────────────────────────────────────
   const initRound = useCallback((
-    round: number,
-    coins: number,
-    score: number,
+    round: number, coins: number, score: number,
     activeBooster: string | null = null,
   ) => {
     cancelAnimationFrame(frameRef.current);
@@ -378,23 +409,30 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
 
     Matter.Runner.run(runner, engine);
 
-    // ✅ extra_shot: si el booster activo es extra_shot, arrancamos con 6 tiros
-    const maxShots  = activeBooster === 'extra_shot' ? 6 : 5;
-    const threshold = Math.round(300 * Math.pow(1.35, round - 1));
+    const maxShots      = 5 + getExtraShots();
+    const initialChain  = getInitialChain(); // ✅ combo seguro
+    const threshold     = Math.round(300 * Math.pow(1.35, round - 1));
+
     shotDataRef.current = {
-      pocketed: [], bounces: 0, chainCount: 0,
+      pocketed: [], bounces: 0,
+      chainCount: initialChain, // ✅
       shotsLeft: maxShots, score, coins,
       threshold, round, maxShots, activeBooster,
+      firstBallPocketed: false, // ✅ reset al iniciar ronda
     };
     phaseRef.current = 'aiming';
     setGamePhase('aiming');
-    setDisplayState({ score, round, shots: maxShots, maxShots, threshold, coins, chainCount: 0, activeBooster });
+    setDisplayState({
+      score, round, shots: maxShots, maxShots, threshold, coins,
+      chainCount: initialChain, // ✅
+      activeBooster,
+    });
     setFloatingTexts([]);
     setPocketFlashes([]);
     setParticles([]);
     ballBouncesRef.current.clear();
     resetShootUI();
-  }, [handlePockets]);
+  }, [handlePockets, getExtraShots, getInitialChain]);
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_LEFT);
@@ -411,6 +449,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     };
   }, []);
 
+  // ── Callbacks gesto ────────────────────────────────────────
   const jsStartAim = useCallback((tx: number, ty: number) => {
     if (phaseRef.current !== 'aiming') { svStep.value = 0; return; }
     const cue = bodiesRef.current.get(0);
@@ -425,29 +464,23 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     if (!cp) return;
     const dx = tx - ox, dy = ty - oy, dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 6) return;
-    const dir = { x: dx / dist, y: dy / dist };
-
-    // ✅ Precisión: línea de mira más larga
-    const maxLen  = shotDataRef.current.activeBooster === 'precision'
-      ? AIM_LINE_PRECISION
-      : AIM_LINE_NORMAL;
+    const dir     = { x: dx / dist, y: dy / dist };
+    // ✅ precisión via hook
+    const maxLen  = AIM_LINE_NORMAL * getAimLineMult();
     const len     = Math.min(dist * 1.8, maxLen);
     const lineEnd = { x: cp.x + dir.x * len, y: cp.y + dir.y * len };
     aimDirRef.current = dir;
     setShootUI({ step: 1, dir, power: 0, cuePos: cp, lineEnd });
-  }, []);
+  }, [getAimLineMult]);
 
   const jsConfirmDir = useCallback(() => {
     const dir = aimDirRef.current, cp = cuePosRef.current;
     if (!dir || !cp) { resetShootUI(); return; }
     Vibration.vibrate(18);
-    // ✅ Precisión: línea confirmada también más larga
-    const maxLen  = shotDataRef.current.activeBooster === 'precision'
-      ? AIM_LINE_PRECISION
-      : PLAY_W * 0.5;
+    const maxLen  = PLAY_W * 0.5 * getAimLineMult();
     const lineEnd = { x: cp.x + dir.x * maxLen, y: cp.y + dir.y * maxLen };
     setShootUI({ step: 2, dir, power: 0, cuePos: cp, lineEnd });
-  }, []);
+  }, [getAimLineMult]);
 
   const jsUpdateCharge = useCallback((dx: number, dy: number) => {
     const dir = aimDirRef.current, cp = cuePosRef.current;
@@ -455,12 +488,10 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     const dot   = -(dx * dir.x + dy * dir.y);
     const power = Math.max(0, Math.min(dot / MAX_DRAG, 1));
     if (power >= 0.99) Vibration.vibrate(25);
-    const maxLen  = shotDataRef.current.activeBooster === 'precision'
-      ? AIM_LINE_PRECISION
-      : PLAY_W * 0.5;
+    const maxLen  = PLAY_W * 0.5 * getAimLineMult();
     const lineEnd = { x: cp.x + dir.x * maxLen, y: cp.y + dir.y * maxLen };
     setShootUI({ step: 2, dir, power, cuePos: cp, lineEnd });
-  }, []);
+  }, [getAimLineMult]);
 
   const jsFire = useCallback((dx: number, dy: number) => {
     const dir = aimDirRef.current, cue = bodiesRef.current.get(0), sd = shotDataRef.current;
@@ -469,20 +500,16 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     let power = Math.max(0, Math.min(dot / MAX_DRAG, 1));
     if (power < 0.04) { resetShootUI(); return; }
 
-    // Efecto FUEGO
+    // ✅ Fuego — multiplicador simple, sin romper la escala
     if (sd.activeBooster === 'fire') {
       power = Math.min(power * 1.3, 1);
       addParticles(cue.position.x, cue.position.y, '#ff6600', 8);
     }
-    // Efecto HIELO
-    if (sd.activeBooster === 'ice') {
-      bodiesRef.current.forEach(body => Matter.Body.set(body, { frictionAir: 0.008 }));
-      addParticles(cue.position.x, cue.position.y, '#88ccff', 6);
-    }
-    // ✅ Precisión: partícula visual de confirmación
-    if (sd.activeBooster === 'precision') {
-      addParticles(cue.position.x, cue.position.y, '#ff006e', 6);
-    }
+    // ✅ Hielo via hook
+    if (sd.activeBooster === 'ice') applyIceEffect();
+
+    // ✅ Precisión via hook — solo partículas
+    if (sd.activeBooster === 'precision') applyPrecisionEffect();
 
     sd.shotsLeft -= 1;
     sd.pocketed   = [];
@@ -496,7 +523,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     addParticles(cue.position.x, cue.position.y, C.primary, 16);
     Vibration.vibrate(40);
     resetShootUI();
-  }, []);
+  }, [applyIceEffect, applyPrecisionEffect, addParticles]);
 
   const jsCancel = useCallback(() => { resetShootUI(); }, []);
 
@@ -542,11 +569,10 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
   const { step, dir, power, cuePos, lineEnd } = shootUI;
   const showAim = (step === 1 || step === 2) && !!dir && !!cuePos;
 
-  // ✅ Color de línea de mira según booster activo
   const aimLineColor = () => {
-    const ab = displayState.activeBooster;
     if (step === 2) return `rgba(255,190,11,${(0.4 + power * 0.55).toFixed(2)})`;
-    if (ab === 'precision') return 'rgba(255,0,110,0.8)';
+    const info = getBoosterInfo();
+    if (displayState.activeBooster === 'precision') return `${info.color}cc`;
     return 'rgba(255,255,255,0.65)';
   };
 
@@ -588,22 +614,19 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
             <Text style={styles.hudLabel}>COMBO</Text>
             <Text style={[styles.hudVal, { color: C.green }]}>{displayState.chainCount > 0 ? `${displayState.chainCount}×` : '—'}</Text>
           </View>
-          {/* ✅ Indicador del booster activo */}
-          {displayState.activeBooster && (
-            <>
-              <View style={styles.hudSep} />
-              <View style={styles.hudBlock}>
-                <Text style={styles.hudLabel}>BOOST</Text>
-                <Text style={styles.hudVal}>
-                  {displayState.activeBooster === 'fire'        ? '🔥' :
-                   displayState.activeBooster === 'ice'         ? '❄️' :
-                   displayState.activeBooster === 'wind'        ? '💨' :
-                   displayState.activeBooster === 'precision'   ? '🎯' :
-                   displayState.activeBooster === 'extra_shot'  ? '🔄' : ''}
-                </Text>
-              </View>
-            </>
-          )}
+          {/* ✅ Booster activo via getBoosterInfo */}
+          {displayState.activeBooster && (() => {
+            const info = getBoosterInfo();
+            return (
+              <>
+                <View style={styles.hudSep} />
+                <View style={styles.hudBlock}>
+                  <Text style={styles.hudLabel}>BOOST</Text>
+                  <Text style={[styles.hudVal, { color: info.color }]}>{info.icon}</Text>
+                </View>
+              </>
+            );
+          })()}
           {onSalir && <TouchableOpacity onPress={onSalir} style={styles.exitBtn}><Text style={styles.exitText}>✕</Text></TouchableOpacity>}
         </View>
 
@@ -620,7 +643,6 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
         <GestureDetector gesture={gesture}>
           <View style={styles.canvas}>
             <Canvas style={StyleSheet.absoluteFill}>
-              {/* Mesa */}
               <RoundedRect x={TABLE_X - 8} y={TABLE_Y - 8} width={TABLE_W + 16} height={TABLE_H + 16} r={8} color={C.tableBorder} />
               <RoundedRect x={TABLE_X} y={TABLE_Y} width={TABLE_W} height={TABLE_H} r={4} color={C.tableFelt} />
               <RoundedRect x={TABLE_X} y={TABLE_Y} width={TABLE_W} height={CUSHION} r={3} color={C.cushion} />
@@ -641,7 +663,6 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               {pocketFlashes.map(f => <Circle key={f.id} cx={f.x} cy={f.y} r={f.r} color={`rgba(255,190,11,${f.opacity.toFixed(2)})`} />)}
               {particles.map(p => <Circle key={p.id} cx={p.x} cy={p.y} r={3} color={p.color} opacity={p.life} />)}
 
-              {/* Línea de mira — ✅ color rosado con precisión */}
               {showAim && lineEnd && (
                 <>
                   <Line
@@ -651,12 +672,12 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                   />
                   <Circle cx={lineEnd.x} cy={lineEnd.y}
                     r={step === 2 ? 6 + power * 5 : 6}
-                    color={step === 2 ? getPowerColor(power) : (displayState.activeBooster === 'precision' ? C.accent : 'rgba(255,255,255,0.45)')} />
+                    color={step === 2 ? getPowerColor(power) : (displayState.activeBooster === 'precision' ? C.accent : 'rgba(255,255,255,0.45)')}
+                  />
                   <Circle cx={cuePos!.x} cy={cuePos!.y} r={BALL_R + 3} color="rgba(255,255,255,0.1)" />
                 </>
               )}
 
-              {/* Taco */}
               {showAim && dir && cuePos && (() => {
                 const bx = -dir.x, by = -dir.y;
                 const off = BALL_R + 6 + (step === 2 ? power * 28 : 0);
@@ -673,7 +694,6 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                 return <Path path={path} color={cc} />;
               })()}
 
-              {/* Medidor potencia */}
               {step === 2 && cuePos && (
                 <Group transform={[{ translateX: cuePos.x }, { translateY: cuePos.y - 50 }]}>
                   <Circle cx={0} cy={0} r={28} color="rgba(0,0,0,0.8)" />
@@ -683,7 +703,6 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                 </Group>
               )}
 
-              {/* Bolas */}
               {balls.map(ball => {
                 const color    = BALL_COLORS[ball.id] ?? '#fff';
                 const isStripe = ball.id >= 9 && ball.id <= 15;
@@ -721,7 +740,6 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
           </View>
         </GestureDetector>
 
-        {/* Debug */}
         {!debugMode && (
           <TouchableOpacity onPress={() => setDebugMode(true)} style={styles.debugToggle}>
             <Text style={styles.debugToggleText}>🐞</Text>
@@ -732,13 +750,13 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
             <Text style={styles.debugTitle}>🐞 DEBUG</Text>
             <Text style={styles.debugInfo}>Booster: {displayState.activeBooster ?? 'ninguno'}</Text>
             <Text style={styles.debugInfo}>Tiros: {displayState.shots}/{displayState.maxShots}</Text>
+            <Text style={styles.debugInfo}>Combo inicial: {getInitialChain()}</Text>
             <TouchableOpacity style={styles.debugClose} onPress={() => setDebugMode(false)}>
               <Text style={styles.debugCloseText}>CERRAR</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Overlay fin de ronda */}
         {gamePhase === 'roundOver' && !showShop && (() => {
           const won    = displayState.score >= displayState.threshold;
           const reward = won ? 150 : 0;
@@ -751,7 +769,6 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                 <TouchableOpacity style={styles.overlayBtn} onPress={() => {
                   shotDataRef.current.coins += reward;
                   setDisplayState(prev => ({ ...prev, coins: prev.coins + reward }));
-                  // ✅ Guardar el booster de esta ronda para no repetirlo
                   lastBoosterRef.current = shotDataRef.current.activeBooster
                     ? `booster_${shotDataRef.current.activeBooster}`
                     : null;
@@ -776,7 +793,6 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
           );
         })()}
 
-        {/* Tienda — ✅ pasa lastBoosterId para no repetir */}
         {showShop && (
           <View style={StyleSheet.absoluteFillObject}>
             <ShopScreen
@@ -786,19 +802,13 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               lastBoosterId={lastBoosterRef.current}
               onClose={(result) => {
                 setShowShop(false);
-                initRound(
-                  displayState.round + 1,
-                  result.coins,
-                  0,
-                  result.activeBooster,
-                );
+                initRound(displayState.round + 1, result.coins, 0, result.activeBooster);
                 startLoop();
               }}
             />
           </View>
         )}
 
-        {/* Game Win */}
         {gamePhase === 'gameWin' && (
           <View style={styles.overlay}>
             <Text style={[styles.overlayTitle, { color: C.gold }]}>¡VICTORIA!</Text>
