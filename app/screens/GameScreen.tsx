@@ -23,6 +23,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
+import { usePowerups } from '../../hooks/usePowerups';
+import ShopScreen from './ShopScreen';
 
 // ─── COLORES ─────────────────────────────────────────────────
 const C = {
@@ -128,6 +130,10 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
   const [aimEnd,        setAimEnd]        = useState<{ x: number; y: number } | null>(null);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
   const [pocketFlashes, setPocketFlashes] = useState<PocketFlash[]>([]);
+  const [showShop,      setShowShop]      = useState(false);
+
+  // ── POTENCIADORES ─────────────────────────────────────────
+  const { activePower, activeId, buyAndActivate, consume, cancel } = usePowerups();
   const [gameState,     setGameState]     = useState({
     score: 0, round: 1, shots: 6, maxShots: 6,
     threshold: 500, coins: 150, chainCount: 0, bounceCount: 0,
@@ -241,7 +247,9 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                           : prev.bounceCount === 1 ? 2 : 1;
           const newChain  = prev.chainCount + 1;
           const cMult     = newChain >= 3 ? 2.5 : newChain === 2 ? 1.5 : 1;
-          const earned    = Math.round(base * bMult * cMult);
+          // Multiplicador de potenciador activo (se resetea tras usarse en disparo)
+          const pMult     = prev.activePowerMult ?? 1.0;
+          const earned    = Math.round(base * bMult * cMult * pMult);
           const coinBonus = Math.floor(earned / 50);
 
           const label = bMult > 1 || cMult > 1
@@ -253,11 +261,16 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
             text: label, x: p.x, y: p.y - 20, opacity: 1, vy: -1.2,
           }]);
 
+          // Abrimos la tienda después de cada bola embocada
+          // para que el jugador pueda comprar un potenciador
+          setTimeout(() => setShowShop(true), 350);
+
           return {
             ...prev,
-            score:      prev.score + earned,
-            coins:      prev.coins + coinBonus,
-            chainCount: newChain,
+            score:           prev.score + earned,
+            coins:           prev.coins + coinBonus,
+            chainCount:      newChain,
+            activePowerMult: 1.0, // resetear tras aplicar
           };
         });
 
@@ -340,6 +353,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     setGameState({
       score: prevScore, round, shots: maxShots, maxShots,
       threshold, coins: prevCoins, chainCount: 0, bounceCount: 0,
+      activePowerMult: 1.0,
     });
     setFloatingTexts([]);
     setPocketFlashes([]);
@@ -391,12 +405,48 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
 
     phaseRef.current = 'shooting';
 
+    // ── Consumir potenciador activo ───────────────────────────
+    const activatedPower = consume();
+
     const dx   = start.x - rx;
     const dy   = start.y - ry;
     const dist = Math.sqrt(dx*dx + dy*dy);
     if (dist > 5) {
-      const power = Math.min(dist * 0.055, 14);
-      Matter.Body.setVelocity(cue, { x: (dx/dist)*power, y: (dy/dist)*power });
+      // Velocidad base escalada por el multiplicador del poder
+      const speedMult = activatedPower?.speedMult ?? 1.0;
+      let vx = (dx/dist) * Math.min(dist * 0.055, 14) * speedMult;
+      let vy = (dy/dist) * Math.min(dist * 0.055, 14) * speedMult;
+
+      // VIENTO: añade componente perpendicular para curvar el tiro
+      if (activatedPower?.curveShot) {
+        const curveMag = Math.min(dist * 0.055, 14) * 0.35;
+        // perpendicular al vector de disparo (rotación 90°)
+        vx += -vy / Math.sqrt(vx*vx + vy*vy) * curveMag;
+        vy +=  vx / Math.sqrt(vx*vx + vy*vy) * curveMag;
+      }
+
+      Matter.Body.setVelocity(cue, { x: vx, y: vy });
+
+      // HIELO: ralentiza todas las bolas del rack al disparar
+      if (activatedPower?.slowBalls) {
+        bodiesRef.current.forEach((body, id) => {
+          if (id === 0) return; // no frenar la bola blanca
+          Matter.Body.setVelocity(body, {
+            x: body.velocity.x * 0.4,
+            y: body.velocity.y * 0.4,
+          });
+          // también reducir frictionAir temporalmente para simular efecto hielo
+          Matter.Body.set(body, { frictionAir: 0.008 });
+        });
+      }
+
+      // Guardar multiplicador de puntos activo en el estado del juego
+      if (activatedPower) {
+        setGameState(prev => ({
+          ...prev,
+          activePowerMult: activatedPower.pointsMult,
+        }));
+      }
     }
 
     aimStartRef.current = null;
@@ -478,11 +528,17 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
           </Text>
         </View>
 
+        {/* Indicador de poder activo */}
+        {activePower && (
+          <View style={styles.powerIndicator}>
+            <Text style={styles.powerEmoji}>{activePower.emoji}</Text>
+            <Text style={styles.powerLabel}>{activePower.name}</Text>
+          </View>
+        )}
+
         {onSalir && (
           <TouchableOpacity
             onPress={() => {
-              // Desbloqueamos orientación antes de desmontar para evitar
-              // que la app quede bloqueada en landscape si el usuario sale
               ScreenOrientation.unlockAsync();
               onSalir();
             }}
@@ -646,6 +702,20 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
         </View>
       </GestureDetector>
 
+      {/* ── TIENDA DE POTENCIADORES ── */}
+      {showShop && !roundOver && (
+        <ShopScreen
+          coins={gameState.coins}
+          activePower={activePower}
+          onBuy={(id) => {
+            return buyAndActivate(id, gameState.coins, (amount) => {
+              setGameState(prev => ({ ...prev, coins: prev.coins - amount }));
+            });
+          }}
+          onClose={() => setShowShop(false)}
+        />
+      )}
+
       {/* ── OVERLAY FIN DE RONDA ── */}
       {roundOver && (
         <View style={styles.overlay}>
@@ -734,5 +804,16 @@ const styles = StyleSheet.create({
     color: C.accent, fontSize: 14, letterSpacing: 3,
     textTransform: 'uppercase', fontWeight: 'bold',
   },
-});
+
+  // ── Potenciador activo en HUD ──
+  powerIndicator: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(131,56,236,0.18)',
+    borderRadius: 6, borderWidth: 0.5, borderColor: '#8338ec88',
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
+  powerEmoji: { fontSize: 14 },
+  powerLabel: {
+    color: '#c084fc', fontSize: 9, fontWeight: 'bold', letterSpacing: 1,
+  },
 });
