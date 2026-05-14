@@ -2,7 +2,7 @@
 import { useCallback, useRef } from 'react';
 import Matter from 'matter-js';
 
-export type BoosterType = 'booster_fire' | 'booster_ice' | 'booster_wind' | 'booster_vida' | null;
+export type BoosterType = 'booster_fire' | 'booster_ice' | 'booster_wind' | 'booster_vida' | 'booster_rayo' | 'booster_diamante' | 'booster_precision' | null;
 
 interface UsePowerupsProps {
   bodiesRef: React.MutableRefObject<Map<number, Matter.Body>>;
@@ -136,6 +136,9 @@ export const usePowerups = ({ bodiesRef, phaseRef, onAddParticles }: UsePowerups
       case 'booster_ice':  return { icon: '❄️', color: '#00ccff', name: 'HIELO' };
       case 'booster_wind': return { icon: '💨', color: '#88ff88', name: 'VIENTO' };
       case 'booster_vida': return { icon: '❤️', color: '#ff006e', name: '+VIDA' };
+      case 'booster_rayo':      return { icon: '⚡', color: '#ffe066', name: 'RAYO' };
+      case 'booster_diamante':  return { icon: '💎', color: '#00e5ff', name: 'DIAMANTE' };
+      case 'booster_precision': return { icon: '🎯', color: '#b388ff', name: 'PRECISIÓN' };
       default: return { icon: '', color: '', name: '' };
     }
   }, []);

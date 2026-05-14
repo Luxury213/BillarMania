@@ -89,7 +89,31 @@ const ALL_BOOSTERS = [
     emoji: '❤️',
     color: '#ff006e',
     price: 150,
-    description: 'Adquiere un tiro extra en la siguiente ronda. Úsalo bien, cada disparo cuenta.',
+    description: 'Otorga un tiro extra en la siguiente ronda. Úsalo bien, cada disparo cuenta.',
+  },
+  {
+    id: 'booster_rayo',
+    name: 'RAYO',
+    emoji: '⚡',
+    color: '#ffe066',
+    price: 130,
+    description: 'El primer disparo de la ronda sale a máxima potencia sin importar la carga.',
+  },
+  {
+    id: 'booster_diamante',
+    name: 'DIAMANTE',
+    emoji: '💎',
+    color: '#00e5ff',
+    price: 200,
+    description: 'Duplica todas las monedas obtenidas durante la ronda. La codicia tiene recompensa.',
+  },
+  {
+    id: 'booster_precision',
+    name: 'PRECISIÓN',
+    emoji: '🎯',
+    color: '#b388ff',
+    price: 110,
+    description: 'La bola blanca no puede caer en tronera. Juega sin miedo a los fallos.',
   },
 ];
 // Rota los potenciadores según la ronda: ronda 1→fire, 2→ice, 3→wind, 4→fire...
@@ -167,6 +191,9 @@ export default function ShopScreen({ coins, round, score, onClose }: ShopScreenP
     if (activeBooster === 'booster_ice')  boosterValue = 'ice';
     if (activeBooster === 'booster_wind') boosterValue = 'wind';
     if (activeBooster === 'booster_vida') boosterValue = 'vida';
+    if (activeBooster === 'booster_rayo')      boosterValue = 'rayo';
+    if (activeBooster === 'booster_diamante')  boosterValue = 'diamante';
+    if (activeBooster === 'booster_precision') boosterValue = 'precision';
 
     onClose({ coins: currentCoins, selectedCue, activeBooster: boosterValue });
   }

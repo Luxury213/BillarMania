@@ -351,7 +351,9 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     
     sd.chainCount = newChain;
     sd.score += earned;
-    sd.coins += coinBonus;
+    // Efecto DIAMANTE: duplica las monedas ganadas
+    const finalCoinBonus = sd.activeBooster === 'diamante' ? coinBonus * 2 : coinBonus;
+    sd.coins += finalCoinBonus;
     sd.pocketed = [];
     sd.bounces = 0;
     
@@ -385,8 +387,17 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
         const dx = body.position.x - p.x, dy = body.position.y - p.y;
         if (Math.sqrt(dx * dx + dy * dy) >= POCKET_R + BALL_R * 0.8) return;
         if (ballId === 0) {
-          Matter.Body.setPosition(body, { x: PLAY_X + PLAY_W * 0.25, y: PLAY_Y + PLAY_H / 2 });
-          Matter.Body.setVelocity(body, { x: 0, y: 0 });
+          // Efecto PRECISIÓN: bloquea el foul, la bola rebota desde el borde
+          if (shotDataRef.current.activeBooster === 'precision') {
+            const vx = body.velocity.x;
+            const vy = body.velocity.y;
+            Matter.Body.setPosition(body, { x: PLAY_X + PLAY_W * 0.25, y: PLAY_Y + PLAY_H / 2 });
+            Matter.Body.setVelocity(body, { x: -vx * 0.6, y: -vy * 0.6 });
+            addParticles(body.position.x, body.position.y, '#b388ff', 10);
+          } else {
+            Matter.Body.setPosition(body, { x: PLAY_X + PLAY_W * 0.25, y: PLAY_Y + PLAY_H / 2 });
+            Matter.Body.setVelocity(body, { x: 0, y: 0 });
+          }
           return;
         }
         if (!engineRef.current) return;
@@ -539,6 +550,13 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     if (sd.activeBooster === 'fire') {
       power = Math.min(power * 1.3, 1);
       addParticles(cue.position.x, cue.position.y, '#ff6600', 8);
+    }
+
+    // Efecto RAYO: primer disparo a máxima potencia
+    if (sd.activeBooster === 'rayo') {
+      power = 1;
+      addParticles(cue.position.x, cue.position.y, '#ffe066', 14);
+      sd.activeBooster = null; // se consume en el primer disparo
     }
     
     // Efecto HIELO (reducir fricción)
