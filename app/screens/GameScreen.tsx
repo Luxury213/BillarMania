@@ -213,6 +213,7 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
   const [particles, setParticles] = useState<Particle[]>([]);
   const [gamePhase, setGamePhase] = useState<'aiming' | 'shooting' | 'roundOver' | 'gameWin'>('aiming');
   const [showShop, setShowShop] = useState(false);
+  const [selectedCue, setSelectedCue] = useState('cue_classic');
   const [displayState, setDisplayState] = useState({
     score: 0, round: 1, shots: 5, maxShots: 5,
     threshold: 300, coins: 0, chainCount: 0,
@@ -733,8 +734,28 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                 path.lineTo(x2 - px * CUE_W * 1.6, y2 - py * CUE_W * 1.6);
                 path.lineTo(x2 + px * CUE_W * 1.6, y2 + py * CUE_W * 1.6);
                 path.close();
-                const cc = step === 2 ? (power > 0.7 ? '#d97706' : power > 0.4 ? '#a16207' : '#8B5E3C') : '#8B5E3C';
-                return <Path path={path} color={cc} />;
+
+                // Color del taco según diseño comprado
+                let cueBodyColor = '#8B5E3C';
+                let cueTipColor  = '#c8a97a';
+                if (selectedCue === 'cue_fire') {
+                  cueBodyColor = step === 2 ? (power > 0.6 ? '#ff2200' : '#ff4500') : '#ff4500';
+                  cueTipColor  = '#ffbe0b';
+                } else if (selectedCue === 'cue_ice') {
+                  cueBodyColor = step === 2 ? (power > 0.6 ? '#0099cc' : '#00cfff') : '#00cfff';
+                  cueTipColor  = '#ffffff';
+                } else {
+                  // Clásico: cambia con la potencia como antes
+                  cueBodyColor = step === 2 ? (power > 0.7 ? '#d97706' : power > 0.4 ? '#a16207' : '#8B5E3C') : '#8B5E3C';
+                  cueTipColor  = '#c8a97a';
+                }
+
+                return (
+                  <Group>
+                    <Path path={path} color={cueBodyColor} />
+                    <Circle cx={x1} cy={y1} r={CUE_W * 0.4} color={cueTipColor} />
+                  </Group>
+                );
               })()}
 
               {/* Medidor de potencia circular */}
@@ -805,28 +826,43 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               <Text style={styles.overlayTitle}>{won ? '¡RONDA SUPERADA!' : 'SIN TIROS'}</Text>
               <Text style={styles.overlayScore}>{displayState.score} / {displayState.threshold} pts</Text>
               {won && <Text style={styles.overlayBonus}>🪙 +{reward} monedas</Text>}
-              {won ? (
-                <TouchableOpacity 
-                  style={styles.overlayBtn} 
-                  onPress={() => {
-                    // Sumar recompensa antes de ir a la tienda
+
+              {/* Tienda siempre disponible */}
+              <TouchableOpacity
+                style={styles.overlayBtn}
+                onPress={() => {
+                  if (won) {
                     const rewardAmount = 150;
                     setDisplayState(prev => ({ ...prev, coins: prev.coins + rewardAmount }));
                     shotDataRef.current.coins += rewardAmount;
-                    setShowShop(true);
+                  }
+                  setShowShop(true);
+                }}
+              >
+                <Text style={styles.overlayBtnText}>IR A LA TIENDA 🏪</Text>
+              </TouchableOpacity>
+
+              {/* Reintentar solo si perdió */}
+              {!won && (
+                <TouchableOpacity
+                  style={[styles.overlayBtn, { borderColor: C.primary, marginTop: 10 }]}
+                  onPress={() => {
+                    initRound(displayState.round, displayState.coins, 0);
+                    startLoop();
                   }}
                 >
-                  <Text style={styles.overlayBtnText}>IR A LA TIENDA 🏪</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={[styles.overlayBtn, { borderColor: C.primary }]} onPress={() => { 
-                  initRound(displayState.round, displayState.coins, 0); 
-                  startLoop(); 
-                }}>
                   <Text style={[styles.overlayBtnText, { color: C.primary }]}>REINTENTAR</Text>
                 </TouchableOpacity>
               )}
-              {onSalir && <TouchableOpacity style={[styles.overlayBtn, { borderColor: '#333', marginTop: 10 }]} onPress={onSalir}><Text style={[styles.overlayBtnText, { color: '#555' }]}>MENÚ PRINCIPAL</Text></TouchableOpacity>}
+
+              {onSalir && (
+                <TouchableOpacity
+                  style={[styles.overlayBtn, { borderColor: '#333', marginTop: 10 }]}
+                  onPress={onSalir}
+                >
+                  <Text style={[styles.overlayBtnText, { color: '#555' }]}>MENÚ PRINCIPAL</Text>
+                </TouchableOpacity>
+              )}
             </View>
           );
         })()}
@@ -838,10 +874,12 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               coins={displayState.coins}
               round={displayState.round}
               score={displayState.score}
-              onClose={(result) => {
+             onClose={(result) => {
                 setShowShop(false);
+                setSelectedCue(result.selectedCue);
+                const won = displayState.score >= displayState.threshold;
                 initRound(
-                  displayState.round + 1,
+                  won ? displayState.round + 1 : displayState.round,
                   result.coins,
                   0,
                   result.activeBooster
