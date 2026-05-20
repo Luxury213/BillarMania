@@ -129,14 +129,6 @@ export default function HomeScreen({ onJugar }: { onJugar: () => void }) {
 </TouchableOpacity>
           </Animated.View>
 
-          <Animated.View style={{ transform: [{ translateY: btn2Float }] }}>
-            <TouchableOpacity activeOpacity={0.8} onPress={() => {}}>
-              <View style={[styles.btnInner, { backgroundColor: colors.gold, width: 220 }]}>
-                <Text style={[styles.btnText, { color: '#1a1a1a' }]}>OPCIONES</Text>
-              </View>
-              <View style={[styles.btnShadow, { backgroundColor: '#b8860b', width: 220 }]} />
-            </TouchableOpacity>
-          </Animated.View>
 
           <Animated.View style={{ transform: [{ translateY: btn3Float }] }}>
             <TouchableOpacity activeOpacity={0.8} onPress={handleLogout}>

@@ -115,6 +115,22 @@ const ALL_BOOSTERS = [
     price: 110,
     description: 'La bola blanca no puede caer en tronera. Juega sin miedo a los fallos.',
   },
+  {
+    id: 'booster_sombra',
+    name: 'SOMBRA',
+    emoji: '🌑',
+    color: '#9b59b6',
+    price: 140,
+    description: 'Duplica los puntos de la siguiente bola que emboque. Una sola oportunidad, úsala bien.',
+  },
+  {
+    id: 'booster_imán',
+    name: 'IMÁN',
+    emoji: '🧲',
+    color: '#e74c3c',
+    price: 160,
+    description: 'Atrae suavemente las bolas numeradas hacia las troneras durante toda la ronda.',
+  },
 ];
 // Rota los potenciadores según la ronda: ronda 1→fire, 2→ice, 3→wind, 4→fire...
 function getBoostersForRound(round: number): typeof ALL_BOOSTERS {
@@ -194,6 +210,8 @@ export default function ShopScreen({ coins, round, score, onClose }: ShopScreenP
     if (activeBooster === 'booster_rayo')      boosterValue = 'rayo';
     if (activeBooster === 'booster_diamante')  boosterValue = 'diamante';
     if (activeBooster === 'booster_precision') boosterValue = 'precision';
+    if (activeBooster === 'booster_sombra') boosterValue = 'sombra';
+    if (activeBooster === 'booster_imán')   boosterValue = 'iman';
 
     onClose({ coins: currentCoins, selectedCue, activeBooster: boosterValue });
   }

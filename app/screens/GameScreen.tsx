@@ -304,18 +304,43 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
       bodiesRef.current.forEach((b, id) => nb.push({ id, x: b.position.x, y: b.position.y }));
       setBalls([...nb]);
       
-      // Efecto VIENTO
+      // Efecto VIENTO: curva todas las bolas numeradas (no la blanca)
       if (shotDataRef.current.activeBooster === 'wind' && phaseRef.current === 'shooting') {
-        const cueBody = bodiesRef.current.get(0);
-        if (cueBody) {
-          const speed = Math.sqrt(cueBody.velocity.x ** 2 + cueBody.velocity.y ** 2);
+        bodiesRef.current.forEach((body, id) => {
+          if (id === 0) return; // excluir bola blanca
+          const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
           if (speed > 0.3) {
-            Matter.Body.applyForce(cueBody, cueBody.position, { x: 0.0008, y: 0 });
-            if (Math.random() < 0.2) {
-              addParticles(cueBody.position.x, cueBody.position.y, '#aaffdd', 2);
+            Matter.Body.applyForce(body, body.position, { x: 0.0006, y: 0 });
+            if (Math.random() < 0.1) {
+              addParticles(body.position.x, body.position.y, '#aaffdd', 1);
             }
           }
-        }
+        });
+      }
+      // Efecto IMÁN: atrae bolas numeradas hacia la tronera más cercana
+      if (shotDataRef.current.activeBooster === 'iman' && phaseRef.current === 'shooting') {
+        bodiesRef.current.forEach((body, id) => {
+          if (id === 0) return; // excluir bola blanca
+          const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
+          if (speed < 0.1) return; // solo si está en movimiento
+          // Encontrar tronera más cercana
+          let nearestPocket = POCKETS[0];
+          let minDist = Infinity;
+          POCKETS.forEach(p => {
+            const d = Math.sqrt((body.position.x - p.x) ** 2 + (body.position.y - p.y) ** 2);
+            if (d < minDist) { minDist = d; nearestPocket = p; }
+          });
+          // Fuerza de atracción suave
+          const dx = nearestPocket.x - body.position.x;
+          const dy = nearestPocket.y - body.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 0) {
+            Matter.Body.applyForce(body, body.position, {
+              x: (dx / dist) * 0.00035,
+              y: (dy / dist) * 0.00035,
+            });
+          }
+        });
       }
       
       setParticles(p => p.map(pt => ({ ...pt, x: pt.x + pt.vx, y: pt.y + pt.vy, life: pt.life - 0.025 })).filter(pt => pt.life > 0));
@@ -351,17 +376,27 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
     }
     
     sd.chainCount = newChain;
-    sd.score += earned;
+    // Efecto SOMBRA: duplica los puntos del tiro si hay bolas embocadas
+    const shadowMult = sd.activeBooster === 'sombra' && sd.pocketed.length > 0 ? 2 : 1;
+    if (shadowMult > 1) {
+      addParticles(sd.pocketed[0].px, sd.pocketed[0].py, '#9b59b6', 14);
+      sd.activeBooster = null; // se consume una vez usado
+    }
+    sd.score += earned * shadowMult;
+    sd.coins += coinBonus;
+
     // Efecto DIAMANTE: duplica las monedas ganadas
     const finalCoinBonus = sd.activeBooster === 'diamante' ? coinBonus * 2 : coinBonus;
     sd.coins += finalCoinBonus;
     sd.pocketed = [];
     sd.bounces = 0;
     
-    // Restaurar fricción normal (efecto HIELO)
+    // Restaurar fricción normal (efecto HIELO, solo bolas numeradas)
     if (sd.activeBooster === 'ice') {
-      bodiesRef.current.forEach(body => {
-        Matter.Body.set(body, { frictionAir: 0.018 });
+      bodiesRef.current.forEach((body, id) => {
+        if (id !== 0) {
+          Matter.Body.set(body, { frictionAir: 0.018 });
+        }
       });
     }
     
@@ -560,10 +595,12 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
       sd.activeBooster = null; // se consume en el primer disparo
     }
     
-    // Efecto HIELO (reducir fricción)
+    // Efecto HIELO (reducir fricción solo a bolas numeradas, no a la blanca)
     if (sd.activeBooster === 'ice') {
-      bodiesRef.current.forEach(body => {
-        Matter.Body.set(body, { frictionAir: 0.008 });
+      bodiesRef.current.forEach((body, id) => {
+        if (id !== 0) {
+          Matter.Body.set(body, { frictionAir: 0.008 });
+        }
       });
       addParticles(cue.position.x, cue.position.y, '#88ccff', 6);
     }
@@ -855,14 +892,12 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                 </TouchableOpacity>
               )}
 
-              {onSalir && (
-                <TouchableOpacity
-                  style={[styles.overlayBtn, { borderColor: '#333', marginTop: 10 }]}
-                  onPress={onSalir}
-                >
-                  <Text style={[styles.overlayBtnText, { color: '#555' }]}>MENÚ PRINCIPAL</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[styles.overlayBtn, { borderColor: '#ff006e', marginTop: 10 }]}
+                onPress={onSalir}
+              >
+                <Text style={[styles.overlayBtnText, { color: '#ff006e' }]}>✕ SALIR PARTIDA</Text>
+              </TouchableOpacity>
             </View>
           );
         })()}
