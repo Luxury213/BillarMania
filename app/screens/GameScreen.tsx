@@ -879,19 +879,38 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
                 <Text style={styles.overlayBtnText}>IR A LA TIENDA 🏪</Text>
               </TouchableOpacity>
 
+              {/* Seguir ronda sin entrar a la tienda (solo si ganó) */}
+              {won && (
+                <TouchableOpacity
+                  style={[styles.overlayBtn, { borderColor: C.green, marginTop: 10 }]}
+                  onPress={() => {
+                    const rewardAmount = 150;
+                    const newCoins = shotDataRef.current.coins + rewardAmount;
+                    initRound(
+                      displayState.round + 1,
+                      newCoins,
+                      0,
+                      shotDataRef.current.activeBooster
+                    );
+                    startLoop();
+                  }}
+                >
+                  <Text style={[styles.overlayBtnText, { color: C.green }]}>SEGUIR RONDA →</Text>
+                </TouchableOpacity>
+              )}
+
               {/* Reintentar solo si perdió */}
               {!won && (
                 <TouchableOpacity
                   style={[styles.overlayBtn, { borderColor: C.primary, marginTop: 10 }]}
                   onPress={() => {
-                    initRound(displayState.round, displayState.coins, 0);
+                    initRound(1, 0, 0, null);
                     startLoop();
                   }}
                 >
                   <Text style={[styles.overlayBtnText, { color: C.primary }]}>REINTENTAR</Text>
                 </TouchableOpacity>
               )}
-
               <TouchableOpacity
                 style={[styles.overlayBtn, { borderColor: '#ff006e', marginTop: 10 }]}
                 onPress={onSalir}
@@ -911,13 +930,15 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
               score={displayState.score}
              onClose={(result) => {
                 setShowShop(false);
-                setSelectedCue(result.selectedCue);
-                const won = displayState.score >= displayState.threshold;
+                // Si no compró potenciador nuevo, conservar el que tenía
+                const boosterToKeep = result.activeBooster !== null
+                  ? result.activeBooster
+                  : shotDataRef.current.activeBooster;
                 initRound(
-                  won ? displayState.round + 1 : displayState.round,
+                  displayState.round + 1,
                   result.coins,
                   0,
-                  result.activeBooster
+                  boosterToKeep
                 );
                 startLoop();
               }}
@@ -932,7 +953,14 @@ export default function GameScreen({ onSalir }: { onSalir?: () => void }) {
             <Text style={styles.overlayScore}>Completaste las 10 rondas 🎱</Text>
             <Text style={styles.overlayScore}>Puntuación final: {displayState.score}</Text>
             <Text style={styles.overlayScore}>Monedas: 🪙 {displayState.coins}</Text>
-            {onSalir && <TouchableOpacity style={styles.overlayBtn} onPress={onSalir}><Text style={styles.overlayBtnText}>SALIR</Text></TouchableOpacity>}
+            <TouchableOpacity
+                style={[styles.overlayBtn, { borderColor: '#ff006e', marginTop: 10 }]}
+                onPress={() => {
+                  if (onSalir) onSalir();
+                }}
+              >
+                <Text style={[styles.overlayBtnText, { color: '#ff006e' }]}>✕ SALIR PARTIDA</Text>
+              </TouchableOpacity>
           </View>
         )}
       </SafeAreaView>
