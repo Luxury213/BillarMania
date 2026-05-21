@@ -48,7 +48,7 @@ function PixelBall({ number, color, size = 36 }: { number: number, color: string
   );
 }
 
-export default function RegisterScreen({ navigation }: any) {
+export default function RegisterScreen({ onVolver }: { onVolver: () => void }) {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -209,7 +209,7 @@ export default function RegisterScreen({ navigation }: any) {
 
             <TouchableOpacity
               style={styles.btnSecondary}
-              onPress={() => navigation.navigate('Login')}
+              onPress={onVolver}
               activeOpacity={0.7}
             >
               <Text style={styles.btnSecondaryText}>{'> YA TENGO CUENTA'}</Text>
